@@ -185,7 +185,12 @@
         state.schemaArrayTypes = schemaInfo.arrayTypes;
         state.schemaTemplates = schemaInfo.templates;
         
-        state.currentIndex = 0;
+        const savedIndex = localStorage.getItem(`rtd_validator_index_${activeFile}`);
+        let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
+        if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
+          indexToLoad = 0;
+        }
+        state.currentIndex = indexToLoad;
         
         // Re-enable elements
         elements.btnReset.disabled = false;
@@ -316,6 +321,13 @@
       state.docs = JSON.parse(savedDocs);
       state.originals = JSON.parse(savedOriginals);
       showToast("Restored validation progress from local storage!", "success");
+      
+      const savedIndex = localStorage.getItem(`rtd_validator_index_${fileName}`);
+      let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
+      if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
+        indexToLoad = 0;
+      }
+      state.currentIndex = indexToLoad;
     } else {
       state.originals = JSON.parse(JSON.stringify(documents));
       state.docs = JSON.parse(JSON.stringify(documents));
@@ -331,9 +343,9 @@
       });
       
       saveToLocalStorage();
+      state.currentIndex = 0;
     }
     
-    state.currentIndex = 0;
     renderAll();
   }
 
@@ -396,6 +408,7 @@
   // Navigation and Updates
   function selectDocument(index) {
     state.currentIndex = index;
+    localStorage.setItem(`rtd_validator_index_${state.fileName}`, index);
     renderActiveDocument();
     
     // Highlight sidebar active item
@@ -513,7 +526,16 @@
       
       // 2. Status Filter Match
       const status = doc._validation ? doc._validation.status : "pending";
-      const statusMatch = state.statusFilter === "all" || status === state.statusFilter;
+      const hasFlaggedFields = doc._validation && Array.isArray(doc._validation.flagged_fields) && doc._validation.flagged_fields.length > 0;
+      
+      let statusMatch = false;
+      if (state.statusFilter === "all") {
+        statusMatch = true;
+      } else if (state.statusFilter === "flagged") {
+        statusMatch = (status === "flagged" || hasFlaggedFields);
+      } else {
+        statusMatch = (status === state.statusFilter);
+      }
       
       return searchMatch && statusMatch;
     });

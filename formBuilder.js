@@ -93,6 +93,24 @@ window.FormBuilder = (function() {
     }
   }
 
+  // Deeply clear all properties of a template object (setting primitives to null, arrays to [])
+  function clearValues(o) {
+    if (typeof o !== 'object' || o === null) return;
+    Object.keys(o).forEach(k => {
+      if (Array.isArray(o[k])) {
+        o[k] = [];
+      } else if (typeof o[k] === 'object' && o[k] !== null) {
+        clearValues(o[k]);
+      } else if (typeof o[k] === 'number') {
+        o[k] = null; // Set to null so empty number parameters are not pre-initialized to 0
+      } else if (typeof o[k] === 'boolean') {
+        o[k] = false;
+      } else {
+        o[k] = null;
+      }
+    });
+  }
+
   // Render a live LaTeX preview
   function renderLatexPreview(latexStr, previewDiv) {
     if (!previewDiv) return;
@@ -368,22 +386,6 @@ window.FormBuilder = (function() {
             if (arrayTemplates && arrayTemplates[normPath]) {
               defaultItem = JSON.parse(JSON.stringify(arrayTemplates[normPath]));
               if (typeof defaultItem === 'object' && defaultItem !== null) {
-                // Clear values in cloned structure
-                const clearValues = (o) => {
-                  Object.keys(o).forEach(k => {
-                    if (typeof o[k] === 'object' && o[k] !== null) {
-                      clearValues(o[k]);
-                    } else if (Array.isArray(o[k])) {
-                      o[k] = [];
-                    } else if (typeof o[k] === 'number') {
-                      o[k] = 0;
-                    } else if (typeof o[k] === 'boolean') {
-                      o[k] = false;
-                    } else {
-                      o[k] = null;
-                    }
-                  });
-                };
                 clearValues(defaultItem);
               } else {
                 defaultItem = "";
@@ -392,21 +394,6 @@ window.FormBuilder = (function() {
               const first = val[0];
               if (typeof first === 'object' && first !== null && !Array.isArray(first)) {
                 defaultItem = JSON.parse(JSON.stringify(first));
-                const clearValues = (o) => {
-                  Object.keys(o).forEach(k => {
-                    if (typeof o[k] === 'object' && o[k] !== null) {
-                      clearValues(o[k]);
-                    } else if (Array.isArray(o[k])) {
-                      o[k] = [];
-                    } else if (typeof o[k] === 'number') {
-                      o[k] = 0;
-                    } else if (typeof o[k] === 'boolean') {
-                      o[k] = false;
-                    } else {
-                      o[k] = null;
-                    }
-                  });
-                };
                 clearValues(defaultItem);
               } else {
                 defaultItem = "";
