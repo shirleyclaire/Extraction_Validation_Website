@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chemical RTD Extraction Validator</title>
+  
+  <!-- KaTeX CSS for beautiful math rendering -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  
+  <!-- Core Design CSS -->
+  <link rel="stylesheet" href="styles.css">
+  
+  <!-- KaTeX JS (defer to load asynchronously) -->
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">🔬</div>
+        <span>RTD Validator</span>
+      </div>
+    </div>
+    
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="upload-zone">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="17 8 12 3 7 8"></polyline>
+        <line x1="12" y1="3" x2="12" y2="15"></line>
+      </svg>
+      <span>Upload JSON / JSONL</span>
+      <small>Drag & drop or click to browse</small>
+      <input type="file" id="file-input" accept=".json,.jsonl">
+    </div>
+    
+    <!-- Search and Filter -->
+    <div class="search-filter-container">
+      <div class="search-input-wrapper">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input type="text" class="search-input" id="search-input" placeholder="Search documents...">
+      </div>
+      <div class="filter-tags">
+        <button class="filter-btn active" id="filter-all">All</button>
+        <button class="filter-btn" id="filter-pending">Pending</button>
+        <button class="filter-btn" id="filter-validated">Verified</button>
+        <button class="filter-btn" id="filter-flagged">Flagged</button>
+      </div>
+    </div>
+    
+    <!-- Progress Tracking -->
+    <div class="sidebar-progress">
+      <div class="progress-header">
+        <span>Validation Progress</span>
+        <span id="progress-text">0 / 0 (0%)</span>
+      </div>
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+      </div>
+    </div>
+    
+    <!-- Document Index List -->
+    <div class="document-list" id="document-list">
+      <!-- Dynamically generated items -->
+    </div>
+    
+    <!-- Sidebar Footer / Actions Panel -->
+    <div class="sidebar-actions">
+      <button class="btn btn-secondary help-btn-sidebar" id="help-btn">❓ Help Guide</button>
+      <div class="export-label">Export Ground Truth</div>
+      <div class="export-buttons-group">
+        <button class="btn btn-secondary btn-export-sidebar" id="btn-download-json" title="Export verified data as a single JSON array">💾 JSON</button>
+        <button class="btn btn-primary btn-export-sidebar" id="btn-download-jsonl" title="Export verified data as a JSONL file">📥 JSONL</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Workspace -->
+  <div class="workspace-wrapper">
+    <header class="app-header">
+      <div class="header-left">
+        <button class="toggle-sidebar-btn" id="toggle-sidebar-btn" title="Toggle Sidebar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="doc-info">
+          <h2 id="header-doc-title">Select or upload a dataset</h2>
+          <span id="header-doc-progress">No active document</span>
+        </div>
+      </div>
+      
+      <!-- Action Toolbar -->
+      <div class="header-right">
+        <button class="btn btn-secondary" id="btn-reset">⚙ Reset to Original</button>
+        <button class="btn btn-flag" id="btn-flag-doc">🏳 Flag Document</button>
+        <button class="btn btn-success" id="btn-save-next">✔ Save & Next</button>
+      </div>
+    </header>
+    
+    <!-- Workspace Panels (Split screen) -->
+    <main class="panels-container">
+      
+      <!-- Left Panel: Read-Only LLM Extract -->
+      <section class="panel">
+        <div class="panel-header">
+          <h3 class="panel-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            Original LLM Extraction Output
+          </h3>
+          <span style="font-size: 0.75rem; color: var(--text-light); font-weight: 500;">READ ONLY</span>
+        </div>
+        <div class="panel-body">
+          <div id="original-viewer">
+            <span style="color: var(--text-light); font-style: italic;">No document loaded. Upload a file or click on a list item.</span>
+          </div>
+          
+          <!-- Equation rendering widget -->
+          <div class="equation-display-card" id="original-equation-box" style="display: none;">
+            <span class="equation-card-label">Rendered LaTeX Formula</span>
+            <!-- Rendered formula goes here -->
+          </div>
+        </div>
+      </section>
+      
+      <!-- Right Panel: Editable validation form -->
+      <section class="panel">
+        <div class="panel-header">
+          <h3 class="panel-title">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
+            Domain Expert Validation Form
+          </h3>
+          <span style="font-size: 0.75rem; color: var(--success); font-weight: 600;">EDITABLE FORM</span>
+        </div>
+        <div class="panel-body" style="background-color: var(--bg-panel);">
+          <form id="editor-form" onsubmit="event.preventDefault();">
+            <span style="color: var(--text-light); font-style: italic;">Select a document to begin validation.</span>
+          </form>
+        </div>
+      </section>
+      
+    </main>
+    
+    <!-- Footer Status bar -->
+    <footer class="status-bar">
+      <div class="status-left">
+        <span>Dataset: <strong id="status-filename" style="color:#fff;">No file loaded</strong></span>
+        <span>Total: <span id="status-total" style="color:#fff;">0</span></span>
+        <span>Validated: <span id="status-validated" style="color:var(--success); font-weight:bold;">0</span></span>
+        <span>Flagged: <span id="status-flagged" style="color:var(--flag); font-weight:bold;">0</span></span>
+      </div>
+      <div class="status-right">
+        <span>Local Storage: <span id="status-storage" style="color:#fff;">0 KB</span></span>
+        <span>Pfizer &bull; IIT Madras RTD Project</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Help & Shortcuts Modal -->
+  <div class="modal-overlay" id="help-modal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title">Expert Validator Help Guide</h3>
+        <button class="modal-close-btn" id="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Welcome to the Chemical RTD Extraction Validation Tool. This website helps non-technical experts validate and correct structured chemical research paper metadata.</p>
+        
+        <h3>How to Validate Fields:</h3>
+        <ul>
+          <li><strong>Edit values</strong> directly in the input boxes. Long text fields automatically expand.</li>
+          <li><strong>Arrays / Lists</strong> are rendered as capsules/pills. Click the <strong>&times;</strong> on a pill to delete it. To add a value, click inside the input box, type the value, and press <strong>Enter</strong>.</li>
+          <li><strong>Nested Lists (Objects)</strong>: You can add new objects or delete entries by using the dedicated buttons.</li>
+          <li><strong>Tables (Spreadsheet Grid)</strong>: For table rows, double-click/focus any cell, edit it like Excel, and add or delete rows as needed.</li>
+          <li><strong>LaTeX Equations</strong>: Dynamic preview of LaTeX formulas will render automatically when editing equations.</li>
+        </ul>
+
+        <h3>Field-Level Flagging:</h3>
+        <p>If a specific value is suspicious or incorrect and you're unsure how to fix it, click the flag icon (🏴) next to that field. It will highlight in orange and save the path in the exported data for further review.</p>
+
+        <h3>Keyboard Shortcuts:</h3>
+        <div class="shortcut-grid">
+          <span class="shortcut-key">Ctrl + S</span>
+          <span>Validate current document, save changes, and advance to next</span>
+          
+          <span class="shortcut-key">Ctrl + Right Arrow</span>
+          <span>Advance to next document in list</span>
+          
+          <span class="shortcut-key">Ctrl + Left Arrow</span>
+          <span>Go back to previous document in list</span>
+          
+          <span class="shortcut-key">Ctrl + F</span>
+          <span>Toggle whole document status flag</span>
+          
+          <span class="shortcut-key">Esc</span>
+          <span>Close this help dialog</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="modal-ok-btn">Got it</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Toast Notifications -->
+  <div class="toast" id="toast">
+    <span id="toast-message">Success!</span>
+  </div>
+
+  <!-- Core Scripts -->
+  <script src="jsonViewer.js"></script>
+  <script src="formBuilder.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
