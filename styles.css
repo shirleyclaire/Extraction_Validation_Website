@@ -1400,21 +1400,106 @@ input:checked + .toggle-slider:before {
   font-weight: 600;
 }
 
-.ai-insight-section p, 
-.ai-insight-section blockquote {
+.ai-insight-section p {
   font-size: 0.875rem;
   color: var(--text-main);
   line-height: 1.5;
   white-space: pre-wrap;
 }
 
-.ai-insight-section blockquote {
-  border-left: 3px solid var(--primary-accent);
-  padding-left: 0.75rem;
+.ai-insights-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.825rem;
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ai-insights-table th {
+  background-color: rgba(30, 64, 175, 0.2);
+  color: #fff;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ai-insights-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  vertical-align: top;
+}
+
+.ai-insights-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ai-corr-text {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.ai-no-changes {
+  font-size: 0.85rem;
+  color: var(--text-light);
   font-style: italic;
-  color: var(--text-muted);
-  background-color: rgba(14, 165, 233, 0.05);
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-  border-radius: 0 4px 4px 0;
+}
+
+/* Form Group Modifications (Aesthetic highlighting for AI or manual changes in emerald green) */
+.form-group.modified {
+  border-left-color: #10b981;
+  background-color: rgba(16, 185, 129, 0.02);
+}
+
+.form-group.modified:hover {
+  background-color: rgba(16, 185, 129, 0.04);
+}
+
+.form-group.modified .form-label {
+  color: #047857; /* soft darker emerald green */
+}
+
+.form-group.modified .form-control {
+  border-color: rgba(16, 185, 129, 0.4) !important;
+  background-color: rgba(16, 185, 129, 0.01) !important;
+}
+
+.form-group.modified .form-control:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15) !important;
+}
+
+/* Emerald green style for tag badges when parent is modified */
+.form-group.modified .tag-badge {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.form-group.modified .tag-close {
+  color: #047857;
+}
+
+.form-group.modified .tag-container {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.form-group.modified .tag-container:focus-within {
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+/* Emerald green style for spreadsheet grid inputs when modified */
+.form-group.modified .spreadsheet-input {
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: rgba(16, 185, 129, 0.02);
+}
+
+.form-group.modified .spreadsheet-input:focus {
+  border-color: #10b981 !important;
+  background-color: #fff !important;
 }

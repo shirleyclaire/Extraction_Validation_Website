@@ -248,8 +248,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
           rawResponse: result,
           corrected_metadata: result.corrected_metadata || result.correctedMetadata,
           corrections_description: result.corrections_description || result.correctionsDescription,
-          chain_of_thought: result.chain_of_thought || result.chainOfThought,
-          source_quotes: result.source_quotes || result.sourceQuotes
+          evidence_summary: result.evidence_summary || result.evidenceSummary || result.source_quotes || result.sourceQuotes
         };
       } catch (err) {
         console.warn("OpenAI call failed, checking if Gemini fallback is available...", err);
@@ -262,8 +261,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
               rawResponse: result,
               corrected_metadata: result.corrected_metadata || result.correctedMetadata,
               corrections_description: result.corrections_description || result.correctionsDescription,
-              chain_of_thought: result.chain_of_thought || result.chainOfThought,
-              source_quotes: result.source_quotes || result.sourceQuotes
+              evidence_summary: result.evidence_summary || result.evidenceSummary || result.source_quotes || result.sourceQuotes
             };
           } catch (geminiErr) {
             throw new Error(`Both OpenAI and Gemini APIs failed. OpenAI error: ${err.message}. Gemini error: ${geminiErr.message}`);
@@ -282,8 +280,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
           rawResponse: result,
           corrected_metadata: result.corrected_metadata || result.correctedMetadata,
           corrections_description: result.corrections_description || result.correctionsDescription,
-          chain_of_thought: result.chain_of_thought || result.chainOfThought,
-          source_quotes: result.source_quotes || result.sourceQuotes
+          evidence_summary: result.evidence_summary || result.evidenceSummary || result.source_quotes || result.sourceQuotes
         };
       } catch (err) {
         throw new Error(`Gemini API call failed: ${err.message}`);
@@ -331,9 +328,14 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
                         { parameter: "temperature", values: [120], unit: "C" }
                       ]
                     },
-                    corrections_description: "Corrected flow_rate to 5.5 and temperature to 120.",
-                    chain_of_thought: "Extracted exact values from the text: flow rate is 5.5 mL/min, temperature is 120 C.",
-                    source_quotes: "flow rate of the reactor was maintained at 5.5 mL/min at a temperature of 120 C."
+                    corrections_description: [
+                      { field: "operating_conditions.flow_rate", issue: "flow rate is 0.0 but should be 5.5", correction: "5.5" },
+                      { field: "operating_conditions.temperature", issue: "temperature is 20 but should be 120", correction: "120" }
+                    ],
+                    evidence_summary: [
+                      { field: "operating_conditions.flow_rate", supporting_text: "flow rate of the reactor was maintained at 5.5 mL/min" },
+                      { field: "operating_conditions.temperature", supporting_text: "temperature of 120 C" }
+                    ]
                   })
                 }
               }]
@@ -355,9 +357,14 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
                         { parameter: "temperature", values: [120], unit: "C" }
                       ]
                     },
-                    corrections_description: "Gemini fallback: Corrected flow_rate to 5.5 and temperature to 120.",
-                    chain_of_thought: "Gemini reasoning: Extracted flow rate of 5.5 and temperature of 120 from the paper text.",
-                    source_quotes: "flow rate of the reactor was maintained at 5.5 mL/min at a temperature of 120 C."
+                    corrections_description: [
+                      { field: "operating_conditions.flow_rate", issue: "flow rate is 0.0 but should be 5.5", correction: "5.5" },
+                      { field: "operating_conditions.temperature", issue: "temperature is 20 but should be 120", correction: "120" }
+                    ],
+                    evidence_summary: [
+                      { field: "operating_conditions.flow_rate", supporting_text: "flow rate of the reactor was maintained at 5.5 mL/min" },
+                      { field: "operating_conditions.temperature", supporting_text: "temperature of 120 C" }
+                    ]
                   })
                 }]
               }

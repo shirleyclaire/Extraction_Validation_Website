@@ -74,6 +74,25 @@ window.FormBuilder = (function() {
     return immutablePaths.some(p => lowerPath === p.toLowerCase());
   }
 
+  // Compare values at a path between originalDoc and current copy to see if modified
+  function isFieldModified(originalDoc, path, currentVal) {
+    if (!originalDoc) return false;
+    const origVal = getValueByPath(originalDoc, path);
+    if (origVal === undefined) return false;
+    
+    // Ignore comparison for _validation metadata or internal keys
+    if (path.includes('_validation') || path.startsWith('_')) return false;
+
+    // Compare origVal and currentVal
+    if (typeof origVal !== typeof currentVal) return true;
+    
+    if (typeof origVal === 'object' && origVal !== null && currentVal !== null) {
+      return JSON.stringify(origVal) !== JSON.stringify(currentVal);
+    }
+    
+    return origVal !== currentVal;
+  }
+
   // Toggle field flag
   function toggleFieldFlag(doc, path) {
     if (!doc._validation) {
@@ -133,7 +152,7 @@ window.FormBuilder = (function() {
     }
   }
 
-  function render(doc, container, onChange, arrayTypes, arrayTemplates) {
+  function render(doc, container, onChange, arrayTypes, arrayTemplates, originalDoc) {
     container.innerHTML = '';
     
     // Create local clone of data to work with
@@ -148,14 +167,14 @@ window.FormBuilder = (function() {
       // Skip internal keys starting with underscores, EXCEPT when we render or save
       if (key.startsWith('_') && key !== '_flagged_notes') return;
       
-      const fieldNode = buildFormNode(docCopy[key], key, key, docCopy, onChange, container, arrayTypes, arrayTemplates);
+      const fieldNode = buildFormNode(docCopy[key], key, key, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
       formRoot.appendChild(fieldNode);
     });
     
     container.appendChild(formRoot);
   }
 
-  function buildFormNode(val, path, labelName, docCopy, onChange, container, arrayTypes, arrayTemplates) {
+  function buildFormNode(val, path, labelName, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc) {
     const group = document.createElement('div');
     group.className = 'form-group';
     
@@ -163,6 +182,12 @@ window.FormBuilder = (function() {
     const flagged = isFieldFlagged(docCopy, path);
     if (flagged) {
       group.classList.add('flagged');
+    }
+
+    // Set modified status class if it differs from the original
+    const modified = isFieldModified(originalDoc, path, val);
+    if (modified) {
+      group.classList.add('modified');
     }
     
     // Label Row
@@ -256,6 +281,14 @@ window.FormBuilder = (function() {
               const cellPath = `${path}.${rowIndex}.${colIndex}`;
               setValueByPath(docCopy, cellPath, e.target.value);
               onChange(docCopy);
+              
+              const currentTableVal = getValueByPath(docCopy, path);
+              const isMod = isFieldModified(originalDoc, path, currentTableVal);
+              if (isMod) {
+                group.classList.add('modified');
+              } else {
+                group.classList.remove('modified');
+              }
             });
             
             td.appendChild(cellInput);
@@ -275,7 +308,7 @@ window.FormBuilder = (function() {
             setValueByPath(docCopy, path, val);
             onChange(docCopy);
             // Re-render form
-            render(docCopy, container, onChange, arrayTypes, arrayTemplates);
+            render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
           });
           tdDelete.appendChild(delBtn);
           tr.appendChild(tdDelete);
@@ -295,7 +328,7 @@ window.FormBuilder = (function() {
           val.push(emptyRow);
           setValueByPath(docCopy, path, val);
           onChange(docCopy);
-          render(docCopy, container, onChange, arrayTypes, arrayTemplates);
+          render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
         });
         tableCard.appendChild(addRowBtn);
         
@@ -334,7 +367,7 @@ window.FormBuilder = (function() {
               val.splice(itemIdx, 1);
               setValueByPath(docCopy, path, val);
               onChange(docCopy);
-              render(docCopy, container, onChange, arrayTypes, arrayTemplates);
+              render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
             });
             itemHeader.appendChild(delItemBtn);
             itemCard.appendChild(itemHeader);
@@ -346,7 +379,7 @@ window.FormBuilder = (function() {
             if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
               Object.keys(item).forEach(childKey => {
                 if (childKey.startsWith('_')) return;
-                const childNode = buildFormNode(item[childKey], `${path}.${itemIdx}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates);
+                const childNode = buildFormNode(item[childKey], `${path}.${itemIdx}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
                 itemBody.appendChild(childNode);
               });
             } else {
@@ -365,6 +398,13 @@ window.FormBuilder = (function() {
                 val[itemIdx] = v;
                 setValueByPath(docCopy, path, val);
                 onChange(docCopy);
+                
+                const isMod = isFieldModified(originalDoc, path, val);
+                if (isMod) {
+                  group.classList.add('modified');
+                } else {
+                  group.classList.remove('modified');
+                }
               });
               
               inputWrapper.appendChild(input);
@@ -406,7 +446,7 @@ window.FormBuilder = (function() {
             val.push(defaultItem);
             setValueByPath(docCopy, path, val);
             onChange(docCopy);
-            render(docCopy, container, onChange, arrayTypes, arrayTemplates);
+            render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
           });
           
           listWrapper.appendChild(addItemBtn);
@@ -439,6 +479,13 @@ window.FormBuilder = (function() {
                 setValueByPath(docCopy, path, val);
                 onChange(docCopy);
                 renderTags();
+                
+                const isMod = isFieldModified(originalDoc, path, val);
+                if (isMod) {
+                  group.classList.add('modified');
+                } else {
+                  group.classList.remove('modified');
+                }
               });
               tag.appendChild(tagDel);
               tagsListSpan.appendChild(tag);
@@ -465,6 +512,13 @@ window.FormBuilder = (function() {
                 onChange(docCopy);
                 e.target.value = '';
                 renderTags();
+                
+                const isMod = isFieldModified(originalDoc, path, val);
+                if (isMod) {
+                  group.classList.add('modified');
+                } else {
+                  group.classList.remove('modified');
+                }
               }
             }
           });
@@ -486,7 +540,7 @@ window.FormBuilder = (function() {
       
       Object.keys(val).forEach(childKey => {
         if (childKey.startsWith('_')) return;
-        const childNode = buildFormNode(val[childKey], `${path}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates);
+        const childNode = buildFormNode(val[childKey], `${path}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
         card.appendChild(childNode);
       });
       
@@ -504,6 +558,13 @@ window.FormBuilder = (function() {
         toggleInput.addEventListener('change', (e) => {
           setValueByPath(docCopy, path, e.target.checked);
           onChange(docCopy);
+          
+          const isMod = isFieldModified(originalDoc, path, e.target.checked);
+          if (isMod) {
+            group.classList.add('modified');
+          } else {
+            group.classList.remove('modified');
+          }
         });
         
         const slider = document.createElement('span');
@@ -539,6 +600,13 @@ window.FormBuilder = (function() {
             const numVal = e.target.value === '' ? null : Number(e.target.value);
             setValueByPath(docCopy, path, numVal);
             onChange(docCopy);
+            
+            const isMod = isFieldModified(originalDoc, path, numVal);
+            if (isMod) {
+              group.classList.add('modified');
+            } else {
+              group.classList.remove('modified');
+            }
           });
         }
         
@@ -567,6 +635,13 @@ window.FormBuilder = (function() {
               const v = e.target.value === '' ? null : e.target.value;
               setValueByPath(docCopy, path, v);
               onChange(docCopy);
+              
+              const isMod = isFieldModified(originalDoc, path, v);
+              if (isMod) {
+                group.classList.add('modified');
+              } else {
+                group.classList.remove('modified');
+              }
               
               // Trigger LaTeX preview if this is an equation field
               if (labelName === 'latex' || labelName === 'text_form') {
@@ -618,6 +693,13 @@ window.FormBuilder = (function() {
               const v = e.target.value === '' ? null : e.target.value;
               setValueByPath(docCopy, path, v);
               onChange(docCopy);
+              
+              const isMod = isFieldModified(originalDoc, path, v);
+              if (isMod) {
+                group.classList.add('modified');
+              } else {
+                group.classList.remove('modified');
+              }
               
               // Trigger LaTeX preview if this is an equation field
               if (labelName === 'latex' || labelName === 'text_form') {

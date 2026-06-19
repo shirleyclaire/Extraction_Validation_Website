@@ -73,7 +73,6 @@
       aiInsightsSummary: document.getElementById("ai-insights-summary"),
       aiInsightsToggleIcon: document.getElementById("ai-insights-toggle-icon"),
       aiInsightsContent: document.getElementById("ai-insights-content"),
-      aiInsightCot: document.getElementById("ai-insight-cot"),
       aiInsightCorrections: document.getElementById("ai-insight-corrections"),
       aiInsightQuotes: document.getElementById("ai-insight-quotes")
     };
@@ -702,13 +701,13 @@
     }
   }
 
-  function safeRenderForm(doc) {
+  function safeRenderForm(doc, original) {
     try {
       window.FormBuilder.render(doc, elements.editorForm, (updatedDoc) => {
         state.docs[state.currentIndex] = updatedDoc;
         saveToLocalStorage();
         updateProgressTracker();
-      }, state.schemaArrayTypes, state.schemaTemplates);
+      }, state.schemaArrayTypes, state.schemaTemplates, original);
     } catch (renderErr) {
       console.error("FormBuilder render error:", renderErr);
       elements.editorForm.innerHTML = `
@@ -782,7 +781,7 @@
     }
     
     // RENDER RIGHT SIDE: Editable Dynamic Form Builder
-    safeRenderForm(doc);
+    safeRenderForm(doc, original);
 
     // Lazily trigger AI validation
     triggerAiValidation();
@@ -822,9 +821,16 @@
     
     // Check if already validated and cached
     if (doc._validation && doc._validation.ai_insights) {
-      console.log("[AI Validation] Found cached AI insights. Rendering card directly.");
-      displayAiInsights(doc._validation.ai_insights);
-      return;
+      const insights = doc._validation.ai_insights;
+      // Force re-validation if it's in the old format (e.g. has chain_of_thought or lacks evidence_summary)
+      const isOldFormat = insights.chain_of_thought !== undefined || insights.evidence_summary === undefined;
+      if (!isOldFormat) {
+        console.log("[AI Validation] Found cached AI insights. Rendering card directly.");
+        displayAiInsights(insights);
+        return;
+      } else {
+        console.log("[AI Validation] Cached insights are in the old format. Re-validating document...");
+      }
     }
     
     // Retrieve keys
@@ -852,10 +858,11 @@
     elements.aiInsightsContent.style.padding = "0 1rem";
     
     try {
-      // Call validator
+      // Call validator with only the text field and domain_metadata from the original document
+      const originalDoc = state.originals[state.currentIndex];
       const result = await window.AiValidator.validateMetadata(
-        doc.text,
-        doc.domain_metadata,
+        originalDoc.text || "",
+        originalDoc.domain_metadata || {},
         openaiKey,
         geminiKey
       );
@@ -908,9 +915,8 @@
       }
       doc._validation.ai_insights = {
         modelUsed: result.modelUsed,
-        corrections_description: result.corrections_description || "No corrections description returned.",
-        chain_of_thought: result.chain_of_thought || "No reasoning returned.",
-        source_quotes: result.source_quotes || "No source references returned."
+        corrections_description: result.corrections_description || [],
+        evidence_summary: result.evidence_summary || []
       };
       
       saveToLocalStorage();
@@ -920,8 +926,7 @@
         displayAiInsights(doc._validation.ai_insights);
         
         // Auto-expand card if there are corrections suggested
-        const desc = (result.corrections_description || "").toLowerCase();
-        const hasCorrections = desc !== "" && !desc.includes("everything is correct") && !desc.includes("everything is right");
+        const hasCorrections = Array.isArray(result.corrections_description) && result.corrections_description.length > 0;
         if (hasCorrections) {
           console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
           elements.aiInsightsCard.classList.add("expanded");
@@ -930,7 +935,7 @@
         }
         
         // Refresh form to show the corrected values
-        safeRenderForm(doc);
+        safeRenderForm(doc, state.originals[state.currentIndex]);
         
         showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
       } else {
@@ -960,17 +965,77 @@
     
     // Summarize corrections count
     let summaryText = "";
-    const desc = (insights.corrections_description || "").toLowerCase();
-    if (desc !== "" && (desc.includes("everything is correct") || desc.includes("everything is right") || desc.includes("all correct"))) {
-      summaryText = "Metadata is verified! No corrections needed. (Click to view details)";
+    const corrections = insights.corrections_description || [];
+    
+    if (Array.isArray(corrections) && corrections.length > 0) {
+      summaryText = `AI suggested ${corrections.length} correction${corrections.length > 1 ? 's' : ''}. Review below. (Click to expand)`;
     } else {
-      summaryText = "AI suggested corrections. Review them below. (Click to expand)";
+      summaryText = "Metadata is verified! No corrections needed. (Click to view details)";
     }
     elements.aiInsightsSummary.textContent = summaryText;
     
-    elements.aiInsightCot.textContent = insights.chain_of_thought || "No reasoning provided.";
-    elements.aiInsightCorrections.textContent = insights.corrections_description || "None.";
-    elements.aiInsightQuotes.textContent = insights.source_quotes || "No source quotes provided.";
+    // Render corrections table
+    const corrContainer = elements.aiInsightCorrections;
+    corrContainer.innerHTML = "";
+    
+    if (Array.isArray(corrections) && corrections.length > 0) {
+      const table = document.createElement("table");
+      table.className = "ai-insights-table";
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Field Path</th>
+            <th>Issue Found</th>
+            <th>Correction Applied</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${corrections.map(c => `
+            <tr>
+              <td><strong>${c.field || ""}</strong></td>
+              <td>${c.issue || ""}</td>
+              <td><span class="ai-corr-text">${c.correction || ""}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+      corrContainer.appendChild(table);
+    } else if (typeof corrections === 'string' && corrections.trim() !== "") {
+      corrContainer.textContent = corrections;
+    } else {
+      corrContainer.innerHTML = '<span class="ai-no-changes">No incorrect extractions detected. Everything is correct!</span>';
+    }
+    
+    // Render evidence table
+    const quotesContainer = elements.aiInsightQuotes;
+    quotesContainer.innerHTML = "";
+    const evidence = insights.evidence_summary || [];
+    
+    if (Array.isArray(evidence) && evidence.length > 0) {
+      const table = document.createElement("table");
+      table.className = "ai-insights-table";
+      table.innerHTML = `
+        <thead>
+          <tr>
+            <th>Field Path</th>
+            <th>Specific Quote</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${evidence.map(e => `
+            <tr>
+              <td style="width: 30%;"><strong>${e.field || ""}</strong></td>
+              <td style="font-style: italic; color: var(--text-muted); font-size: 0.8rem;">"${e.supporting_text || ""}"</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+      quotesContainer.appendChild(table);
+    } else if (typeof evidence === 'string' && evidence.trim() !== "") {
+      quotesContainer.textContent = evidence;
+    } else {
+      quotesContainer.innerHTML = '<span class="ai-no-changes">No explicit supporting quotes returned.</span>';
+    }
   }
 
   // Download / Export Functions
