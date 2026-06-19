@@ -57,7 +57,25 @@
       modalOkBtn: document.getElementById("modal-ok-btn"),
       
       toast: document.getElementById("toast"),
-      toastMessage: document.getElementById("toast-message")
+      toastMessage: document.getElementById("toast-message"),
+      
+      aiSettingsBtn: document.getElementById("ai-settings-btn"),
+      aiSettingsModal: document.getElementById("ai-settings-modal"),
+      settingsOpenaiKey: document.getElementById("settings-openai-key"),
+      settingsGeminiKey: document.getElementById("settings-gemini-key"),
+      settingsCancelBtn: document.getElementById("settings-cancel-btn"),
+      settingsSaveBtn: document.getElementById("settings-save-btn"),
+      aiSettingsCloseBtn: document.getElementById("ai-settings-close-btn"),
+      aiToggle: document.getElementById("ai-toggle"),
+      aiInsightsCard: document.getElementById("ai-insights-card"),
+      aiInsightsHeader: document.getElementById("ai-insights-header"),
+      aiInsightsBadge: document.getElementById("ai-insights-badge"),
+      aiInsightsSummary: document.getElementById("ai-insights-summary"),
+      aiInsightsToggleIcon: document.getElementById("ai-insights-toggle-icon"),
+      aiInsightsContent: document.getElementById("ai-insights-content"),
+      aiInsightCot: document.getElementById("ai-insight-cot"),
+      aiInsightCorrections: document.getElementById("ai-insight-corrections"),
+      aiInsightQuotes: document.getElementById("ai-insight-quotes")
     };
   }
 
@@ -132,6 +150,45 @@
       }
     });
 
+    // AI Settings Modal
+    elements.aiSettingsBtn.addEventListener("click", () => {
+      elements.settingsOpenaiKey.value = localStorage.getItem("rtd_validator_openai_key") || "";
+      elements.settingsGeminiKey.value = localStorage.getItem("rtd_validator_gemini_key") || "";
+      elements.aiSettingsModal.classList.add("open");
+    });
+    elements.aiSettingsCloseBtn.addEventListener("click", () => elements.aiSettingsModal.classList.remove("open"));
+    elements.settingsCancelBtn.addEventListener("click", () => elements.aiSettingsModal.classList.remove("open"));
+    elements.aiSettingsModal.addEventListener("click", (e) => {
+      if (e.target === elements.aiSettingsModal) {
+        elements.aiSettingsModal.classList.remove("open");
+      }
+    });
+
+    elements.settingsSaveBtn.addEventListener("click", () => {
+      localStorage.setItem("rtd_validator_openai_key", elements.settingsOpenaiKey.value.trim());
+      localStorage.setItem("rtd_validator_gemini_key", elements.settingsGeminiKey.value.trim());
+      elements.aiSettingsModal.classList.remove("open");
+      showToast("API keys saved successfully!", "success");
+      if (elements.aiToggle.checked) {
+        triggerAiValidation();
+      }
+    });
+
+    // AI Toggle Switch
+    elements.aiToggle.addEventListener("change", (e) => {
+      localStorage.setItem("rtd_validator_ai_enabled", e.target.checked);
+      if (e.target.checked) {
+        triggerAiValidation();
+      } else {
+        elements.aiInsightsCard.style.display = "none";
+      }
+    });
+
+    // AI Insights Accordion Click
+    elements.aiInsightsHeader.addEventListener("click", () => {
+      elements.aiInsightsCard.classList.toggle("expanded");
+    });
+
     // Keyboard Shortcuts
     window.addEventListener("keydown", (e) => {
       // Check if user is typing in a text input/textarea (to prevent intercepting standard typing)
@@ -165,45 +222,61 @@
       // Escape: Close modals
       if (e.key === 'Escape') {
         elements.helpModal.classList.remove("open");
+        elements.aiSettingsModal.classList.remove("open");
       }
     });
   }
 
   // Load initial state or empty state
   function loadInitialState() {
-    const activeFile = localStorage.getItem("rtd_validator_active_file");
-    if (activeFile) {
-      const savedDocs = localStorage.getItem(`rtd_validator_data_${activeFile}`);
-      const savedOriginals = localStorage.getItem(`rtd_validator_original_${activeFile}`);
-      if (savedDocs && savedOriginals) {
-        state.fileName = activeFile;
-        state.docs = JSON.parse(savedDocs);
-        state.originals = JSON.parse(savedOriginals);
-        
-        // Analyze schema to dynamically identify empty arrays structure
-        const schemaInfo = analyzeSchema(state.originals);
-        state.schemaArrayTypes = schemaInfo.arrayTypes;
-        state.schemaTemplates = schemaInfo.templates;
-        
-        const savedIndex = localStorage.getItem(`rtd_validator_index_${activeFile}`);
-        let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
-        if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
-          indexToLoad = 0;
+    try {
+      // Load toggle state from localStorage
+      const aiEnabled = localStorage.getItem("rtd_validator_ai_enabled") === "true";
+      elements.aiToggle.checked = aiEnabled;
+
+      const activeFile = localStorage.getItem("rtd_validator_active_file");
+      if (activeFile) {
+        const savedDocs = localStorage.getItem(`rtd_validator_data_${activeFile}`);
+        const savedOriginals = localStorage.getItem(`rtd_validator_original_${activeFile}`);
+        if (savedDocs && savedOriginals) {
+          state.fileName = activeFile;
+          state.docs = JSON.parse(savedDocs);
+          state.originals = JSON.parse(savedOriginals);
+          
+          if (!Array.isArray(state.docs) || !Array.isArray(state.originals)) {
+            throw new Error("Saved documents state in localStorage is not a valid array");
+          }
+          
+          // Analyze schema to dynamically identify empty arrays structure
+          const schemaInfo = analyzeSchema(state.originals);
+          state.schemaArrayTypes = schemaInfo.arrayTypes;
+          state.schemaTemplates = schemaInfo.templates;
+          
+          const savedIndex = localStorage.getItem(`rtd_validator_index_${activeFile}`);
+          let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
+          if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
+            indexToLoad = 0;
+          }
+          state.currentIndex = indexToLoad;
+          
+          // Re-enable elements
+          elements.btnReset.disabled = false;
+          elements.btnFlagDoc.disabled = false;
+          elements.btnSaveNext.disabled = false;
+          elements.btnDownloadJson.disabled = false;
+          elements.btnDownloadJsonl.disabled = false;
+          
+          document.getElementById("status-filename").textContent = activeFile;
+          renderAll();
+          showToast("Restored progress for " + activeFile, "success");
+          return;
         }
-        state.currentIndex = indexToLoad;
-        
-        // Re-enable elements
-        elements.btnReset.disabled = false;
-        elements.btnFlagDoc.disabled = false;
-        elements.btnSaveNext.disabled = false;
-        elements.btnDownloadJson.disabled = false;
-        elements.btnDownloadJsonl.disabled = false;
-        
-        document.getElementById("status-filename").textContent = activeFile;
-        renderAll();
-        showToast("Restored progress for " + activeFile, "success");
-        return;
       }
+    } catch (err) {
+      console.error("Failed to load initial state from localStorage:", err);
+      // Clean up potentially corrupt keys
+      localStorage.removeItem("rtd_validator_active_file");
+      showToast("Reset corrupt session state from local storage", "flagged");
     }
     renderEmptyState();
   }
@@ -621,6 +694,31 @@
       
       elements.documentList.appendChild(item);
     });
+
+    // Scroll active item into view
+    const activeItem = elements.documentList.querySelector(".doc-item.active");
+    if (activeItem) {
+      activeItem.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  function safeRenderForm(doc) {
+    try {
+      window.FormBuilder.render(doc, elements.editorForm, (updatedDoc) => {
+        state.docs[state.currentIndex] = updatedDoc;
+        saveToLocalStorage();
+        updateProgressTracker();
+      }, state.schemaArrayTypes, state.schemaTemplates);
+    } catch (renderErr) {
+      console.error("FormBuilder render error:", renderErr);
+      elements.editorForm.innerHTML = `
+        <div class="render-error-container" style="padding: 1.5rem; background: rgba(239, 68, 68, 0.08); border: 1px dashed #ef4444; border-radius: 8px; color: #ef4444; margin-top: 1rem;">
+          <h4 style="margin: 0 0 0.5rem 0; font-size: 1rem; font-weight: 600;">⚠️ Form Render Error</h4>
+          <p style="margin: 0 0 1rem 0; font-size: 0.85rem; line-height: 1.4;">An exception occurred while building the validation form. This usually happens if the active document does not conform to the expected schema.</p>
+          <pre style="margin: 0; padding: 0.75rem; background: rgba(0, 0, 0, 0.2); border-radius: 6px; font-family: monospace; font-size: 0.75rem; overflow-x: auto; white-space: pre-wrap; color: #fecaca;">${renderErr.message}\n\nStack:\n${renderErr.stack}</pre>
+        </div>
+      `;
+    }
   }
 
   function renderActiveDocument() {
@@ -684,12 +782,195 @@
     }
     
     // RENDER RIGHT SIDE: Editable Dynamic Form Builder
-    window.FormBuilder.render(doc, elements.editorForm, (updatedDoc) => {
-      // Change callback
-      state.docs[state.currentIndex] = updatedDoc;
+    safeRenderForm(doc);
+
+    // Lazily trigger AI validation
+    triggerAiValidation();
+  }
+
+  // AI Validation Trigger
+  async function triggerAiValidation() {
+    if (state.docs.length === 0) return;
+    
+    const doc = state.docs[state.currentIndex];
+    const activeIndexAtStart = state.currentIndex;
+    
+    console.log("[AI Validation] triggerAiValidation invoked. Index:", activeIndexAtStart);
+    
+    // Check if toggle is enabled
+    const aiEnabled = elements.aiToggle.checked;
+    if (!aiEnabled) {
+      console.log("[AI Validation] Switch is OFF. Hiding insights card.");
+      elements.aiInsightsCard.style.display = "none";
+      return;
+    }
+    
+    // Check if document has domain_metadata and text
+    if (doc.domain_metadata === undefined || doc.text === undefined) {
+      console.warn("[AI Validation] Current document schema does not support AI validation (missing domain_metadata or text).");
+      elements.aiInsightsCard.style.display = "block";
+      elements.aiInsightsCard.classList.remove("loading", "expanded");
+      elements.aiInsightsBadge.className = "ai-insights-badge";
+      elements.aiInsightsBadge.textContent = "🤖 AI Insights";
+      elements.aiInsightsSummary.textContent = "AI validation is only supported for schemas with 'text' and 'domain_metadata'.";
+      elements.aiInsightsContent.style.maxHeight = "0px";
+      elements.aiInsightsContent.style.padding = "0 1rem";
+      return;
+    }
+    
+    elements.aiInsightsCard.style.display = "block";
+    
+    // Check if already validated and cached
+    if (doc._validation && doc._validation.ai_insights) {
+      console.log("[AI Validation] Found cached AI insights. Rendering card directly.");
+      displayAiInsights(doc._validation.ai_insights);
+      return;
+    }
+    
+    // Retrieve keys
+    const openaiKey = localStorage.getItem("rtd_validator_openai_key") || "";
+    const geminiKey = localStorage.getItem("rtd_validator_gemini_key") || "";
+    
+    if (!openaiKey && !geminiKey) {
+      console.warn("[AI Validation] No API Keys configured in localStorage.");
+      elements.aiInsightsCard.classList.remove("loading", "expanded");
+      elements.aiInsightsBadge.className = "ai-insights-badge";
+      elements.aiInsightsBadge.textContent = "🤖 AI Warning";
+      elements.aiInsightsSummary.textContent = "API Keys missing. Click 'API Keys' in the sidebar to configure.";
+      elements.aiInsightsContent.style.maxHeight = "0px";
+      elements.aiInsightsContent.style.padding = "0 1rem";
+      return;
+    }
+    
+    // Set loading state
+    console.log("[AI Validation] Initiating API call...");
+    elements.aiInsightsCard.classList.add("loading");
+    elements.aiInsightsBadge.className = "ai-insights-badge loading";
+    elements.aiInsightsBadge.textContent = "⚡ Validating...";
+    elements.aiInsightsSummary.textContent = "AI is reviewing the domain metadata against the source text...";
+    elements.aiInsightsContent.style.maxHeight = "0px";
+    elements.aiInsightsContent.style.padding = "0 1rem";
+    
+    try {
+      // Call validator
+      const result = await window.AiValidator.validateMetadata(
+        doc.text,
+        doc.domain_metadata,
+        openaiKey,
+        geminiKey
+      );
+      
+      console.log("[AI Validation] API response received:", result);
+      
+      const currentDocAfterCall = state.docs[state.currentIndex];
+      
+      // Extract corrected metadata robustly. LLM might put keys at root or nested under corrected_metadata
+      let corrected = result.corrected_metadata || result.correctedMetadata || result.rawResponse;
+      if (!corrected) {
+        corrected = result;
+      }
+      
+      // If it is a string representation, parse it
+      if (typeof corrected === 'string') {
+        try {
+          corrected = JSON.parse(corrected);
+        } catch (e) {
+          console.warn("[AI Validation] Failed parsing corrected metadata string:", e);
+        }
+      }
+      
+      if (corrected && typeof corrected === 'object') {
+        corrected = JSON.parse(JSON.stringify(corrected));
+        // Remove meta-parameters if LLM placed them at the root
+        const metaKeys = [
+          'corrected_metadata', 'correctedMetadata',
+          'corrections_description', 'correctionsDescription',
+          'chain_of_thought', 'chainOfThought',
+          'source_quotes', 'sourceQuotes',
+          'modelUsed', 'rawResponse'
+        ];
+        metaKeys.forEach(k => delete corrected[k]);
+        
+        // Deep clone current metadata and merge the corrected keys defensively
+        const currentMeta = doc.domain_metadata ? JSON.parse(JSON.stringify(doc.domain_metadata)) : {};
+        Object.keys(corrected).forEach(k => {
+          currentMeta[k] = corrected[k];
+        });
+        
+        doc.domain_metadata = currentMeta;
+        console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc.domain_metadata);
+      } else {
+        console.warn("[AI Validation] Could not extract corrected metadata object from API response.");
+      }
+      
+      if (!doc._validation) {
+        doc._validation = { status: "pending", flagged_fields: [] };
+      }
+      doc._validation.ai_insights = {
+        modelUsed: result.modelUsed,
+        corrections_description: result.corrections_description || "No corrections description returned.",
+        chain_of_thought: result.chain_of_thought || "No reasoning returned.",
+        source_quotes: result.source_quotes || "No source references returned."
+      };
+      
       saveToLocalStorage();
       updateProgressTracker();
-    }, state.schemaArrayTypes, state.schemaTemplates);
+      
+      if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
+        displayAiInsights(doc._validation.ai_insights);
+        
+        // Auto-expand card if there are corrections suggested
+        const desc = (result.corrections_description || "").toLowerCase();
+        const hasCorrections = desc !== "" && !desc.includes("everything is correct") && !desc.includes("everything is right");
+        if (hasCorrections) {
+          console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
+          elements.aiInsightsCard.classList.add("expanded");
+        } else {
+          elements.aiInsightsCard.classList.remove("expanded");
+        }
+        
+        // Refresh form to show the corrected values
+        safeRenderForm(doc);
+        
+        showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
+      } else {
+        console.log("[AI Validation] API returned, but active document changed. Saved state, skipped rendering.");
+      }
+    } catch (err) {
+      console.error("[AI Validation] Validation execution error:", err);
+      const currentDocAfterCall = state.docs[state.currentIndex];
+      if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
+        elements.aiInsightsCard.classList.remove("loading");
+        elements.aiInsightsBadge.className = "ai-insights-badge fallback";
+        elements.aiInsightsBadge.textContent = "❌ AI Error";
+        elements.aiInsightsSummary.textContent = err.message;
+      }
+    }
+  }
+
+  function displayAiInsights(insights) {
+    console.log("[AI Validation] Rendering AI insights card display values.");
+    elements.aiInsightsCard.style.display = "block"; // Explicitly ensure visibility
+    elements.aiInsightsCard.classList.remove("loading");
+    elements.aiInsightsBadge.className = "ai-insights-badge";
+    if (insights.modelUsed.includes("Fallback") || insights.modelUsed === "Gemini") {
+      elements.aiInsightsBadge.classList.add("fallback");
+    }
+    elements.aiInsightsBadge.textContent = `🤖 ${insights.modelUsed}`;
+    
+    // Summarize corrections count
+    let summaryText = "";
+    const desc = (insights.corrections_description || "").toLowerCase();
+    if (desc !== "" && (desc.includes("everything is correct") || desc.includes("everything is right") || desc.includes("all correct"))) {
+      summaryText = "Metadata is verified! No corrections needed. (Click to view details)";
+    } else {
+      summaryText = "AI suggested corrections. Review them below. (Click to expand)";
+    }
+    elements.aiInsightsSummary.textContent = summaryText;
+    
+    elements.aiInsightCot.textContent = insights.chain_of_thought || "No reasoning provided.";
+    elements.aiInsightCorrections.textContent = insights.corrections_description || "None.";
+    elements.aiInsightQuotes.textContent = insights.source_quotes || "No source quotes provided.";
   }
 
   // Download / Export Functions

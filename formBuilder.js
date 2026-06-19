@@ -241,6 +241,7 @@ window.FormBuilder = (function() {
         // Tbody
         const tbody = document.createElement('tbody');
         val.forEach((rowArr, rowIndex) => {
+          if (!rowArr || !Array.isArray(rowArr)) return;
           const tr = document.createElement('tr');
           headers.forEach((h, colIndex) => {
             const td = document.createElement('td');

@@ -72,7 +72,10 @@
     
     <!-- Sidebar Footer / Actions Panel -->
     <div class="sidebar-actions">
-      <button class="btn btn-secondary help-btn-sidebar" id="help-btn">❓ Help Guide</button>
+      <div class="sidebar-actions-group">
+        <button class="btn btn-secondary help-btn-sidebar" id="help-btn">❓ Help Guide</button>
+        <button class="btn btn-secondary settings-btn-sidebar" id="ai-settings-btn" title="Configure AI API credentials">⚙ API Keys</button>
+      </div>
       <div class="export-label">Export Ground Truth</div>
       <div class="export-buttons-group">
         <button class="btn btn-secondary btn-export-sidebar" id="btn-download-json" title="Export verified data as a single JSON array">💾 JSON</button>
@@ -138,10 +141,41 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z"></path></svg>
             Domain Expert Validation Form
           </h3>
-          <span style="font-size: 0.75rem; color: var(--success); font-weight: 600;">EDITABLE FORM</span>
+          <div class="header-ai-toggle-container">
+            <label class="ai-toggle-label" for="ai-toggle">🤖 AI Assistant</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="ai-toggle">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
         </div>
-        <div class="panel-body" style="background-color: var(--bg-panel);">
-          <form id="editor-form" onsubmit="event.preventDefault();">
+        <div class="panel-body" style="background-color: var(--bg-panel); display: flex; flex-direction: column; gap: 1rem; overflow-y: auto;">
+          <!-- AI Assistant Insights Accordion Card -->
+          <div class="ai-insights-card" id="ai-insights-card" style="display: none;">
+            <div class="ai-insights-header" id="ai-insights-header">
+              <div class="ai-insights-header-left">
+                <span class="ai-insights-badge" id="ai-insights-badge">🤖 AI Insights</span>
+                <span class="ai-insights-summary" id="ai-insights-summary">AI checked this document.</span>
+              </div>
+              <span class="ai-insights-toggle-icon" id="ai-insights-toggle-icon">▼</span>
+            </div>
+            <div class="ai-insights-content collapsed" id="ai-insights-content">
+              <div class="ai-insight-section">
+                <h4>💡 Chain of Thought Reasoning</h4>
+                <p id="ai-insight-cot"></p>
+              </div>
+              <div class="ai-insight-section">
+                <h4>⚠️ Wrong Extractions Detected</h4>
+                <p id="ai-insight-corrections"></p>
+              </div>
+              <div class="ai-insight-section">
+                <h4>📖 Source Quotes from Paper</h4>
+                <blockquote id="ai-insight-quotes"></blockquote>
+              </div>
+            </div>
+          </div>
+          
+          <form id="editor-form" onsubmit="event.preventDefault();" style="flex: 1;">
             <span style="color: var(--text-light); font-style: italic;">Select a document to begin validation.</span>
           </form>
         </div>
@@ -210,6 +244,35 @@
     </div>
   </div>
 
+  <!-- AI Settings Modal -->
+  <div class="modal-overlay" id="ai-settings-modal">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title">Configure AI API Credentials</h3>
+        <button class="modal-close-btn" id="ai-settings-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 1rem;">To use the AI Assistant, enter your API credentials below. Keys are stored locally in your browser's cache and are sent directly to the official API endpoints.</p>
+        
+        <div class="form-group" style="margin-top: 1rem;">
+          <label class="form-label" style="font-weight: 600; margin-bottom: 0.35rem;">OpenAI API Key (GPT-4o-mini)</label>
+          <input type="password" class="form-control" id="settings-openai-key" placeholder="sk-proj-...">
+          <small style="color: var(--text-light); margin-top: 0.25rem; display: block;">Used for primary metadata validation. Starts with 'sk-'.</small>
+        </div>
+        
+        <div class="form-group" style="margin-top: 1.25rem;">
+          <label class="form-label" style="font-weight: 600; margin-bottom: 0.35rem;">Google Gemini API Key (Fallback)</label>
+          <input type="password" class="form-control" id="settings-gemini-key" placeholder="AIzaSy...">
+          <small style="color: var(--text-light); margin-top: 0.25rem; display: block;">Used as a fallback if OpenAI keys fail, or directly if no OpenAI key is provided.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="settings-cancel-btn">Cancel</button>
+        <button class="btn btn-primary" id="settings-save-btn">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Toast Notifications -->
   <div class="toast" id="toast">
     <span id="toast-message">Success!</span>
@@ -217,6 +280,7 @@
 
   <!-- Core Scripts -->
   <script src="jsonViewer.js"></script>
+  <script src="aiValidator.js"></script>
   <script src="formBuilder.js"></script>
   <script src="app.js"></script>
 </body>
