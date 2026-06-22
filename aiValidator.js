@@ -158,7 +158,7 @@ Return ONLY valid JSON.
 
 Return only the raw JSON object conforming to the schema above, with no extra text, explanations, or wrapper.`;
 
-  async function callOpenAI(text, domainMetadata, apiKey) {
+  async function callOpenAI(text, domainMetadata, apiKey, signal) {
     const userPrompt = `Research Paper Text Chunk:
 [TEXT_START]
 ${text}
@@ -169,6 +169,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
 
     const response = await fetch(OPENAI_URL, {
       method: "POST",
+      signal: signal,
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`
@@ -194,7 +195,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
     return JSON.parse(cleanJsonString(resultText));
   }
 
-  async function callGemini(text, domainMetadata, apiKey) {
+  async function callGemini(text, domainMetadata, apiKey, signal) {
     const prompt = `${SYSTEM_PROMPT}
 
 Research Paper Text Chunk:
@@ -207,6 +208,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
 
     const response = await fetch(getGeminiUrl(apiKey), {
       method: "POST",
+      signal: signal,
       headers: {
         "Content-Type": "application/json"
       },
@@ -235,7 +237,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
     return JSON.parse(cleanJsonString(resultText));
   }
 
-  async function validateMetadata(text, domainMetadata, openaiKey, geminiKey) {
+  async function validateMetadata(text, domainMetadata, openaiKey, geminiKey, signal) {
     if (!openaiKey && !geminiKey) {
       throw new Error("Missing API Credentials. Please configure OpenAI or Gemini API Keys in settings.");
     }
@@ -244,7 +246,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
     if (openaiKey) {
       try {
         console.log("Calling OpenAI GPT-4o-mini...");
-        const result = await callOpenAI(text, domainMetadata, openaiKey);
+        const result = await callOpenAI(text, domainMetadata, openaiKey, signal);
         return {
           modelUsed: "GPT-4o-mini",
           rawResponse: result,
@@ -257,7 +259,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
         if (geminiKey) {
           try {
             console.log("Calling Gemini Fallback...");
-            const result = await callGemini(text, domainMetadata, geminiKey);
+            const result = await callGemini(text, domainMetadata, geminiKey, signal);
             return {
               modelUsed: "Gemini Fallback (OpenAI error)",
               rawResponse: result,
@@ -276,7 +278,7 @@ ${JSON.stringify(domainMetadata, null, 2)}`;
       // Direct call to Gemini if only Gemini key is provided
       try {
         console.log("Calling Gemini directly (No OpenAI key provided)...");
-        const result = await callGemini(text, domainMetadata, geminiKey);
+        const result = await callGemini(text, domainMetadata, geminiKey, signal);
         return {
           modelUsed: "Gemini",
           rawResponse: result,

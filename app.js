@@ -13,6 +13,11 @@
     schemaTemplates: {}
   };
 
+  // Debounce and abort timers/controllers for AI validation
+  let aiValidationTimeout = null;
+  let aiValidationAbortController = null;
+  let lsSizeTimer = null;
+
   // Helper to dynamically get domain metadata key (handles domain_metadata and Domain_metadata)
   function getDomainMetadataKey(doc) {
     if (!doc) return "domain_metadata";
@@ -20,6 +25,17 @@
     if (doc.domain_metadata !== undefined) return "domain_metadata";
     const foundKey = Object.keys(doc).find(k => k.toLowerCase() === 'domain_metadata');
     return foundKey || "domain_metadata";
+  }
+
+  // HTML escape helper to mitigate XSS
+  function escapeHtml(str) {
+    if (str === null || str === undefined) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
   }
 
   // DOM Elements
@@ -160,8 +176,8 @@
 
     // AI Settings Modal
     elements.aiSettingsBtn.addEventListener("click", () => {
-      elements.settingsOpenaiKey.value = localStorage.getItem("rtd_validator_openai_key") || "";
-      elements.settingsGeminiKey.value = localStorage.getItem("rtd_validator_gemini_key") || "";
+      elements.settingsOpenaiKey.value = sessionStorage.getItem("rtd_validator_openai_key") || localStorage.getItem("rtd_validator_openai_key") || "";
+      elements.settingsGeminiKey.value = sessionStorage.getItem("rtd_validator_gemini_key") || localStorage.getItem("rtd_validator_gemini_key") || "";
       elements.aiSettingsModal.classList.add("open");
     });
     elements.aiSettingsCloseBtn.addEventListener("click", () => elements.aiSettingsModal.classList.remove("open"));
@@ -173,8 +189,11 @@
     });
 
     elements.settingsSaveBtn.addEventListener("click", () => {
-      localStorage.setItem("rtd_validator_openai_key", elements.settingsOpenaiKey.value.trim());
-      localStorage.setItem("rtd_validator_gemini_key", elements.settingsGeminiKey.value.trim());
+      sessionStorage.setItem("rtd_validator_openai_key", elements.settingsOpenaiKey.value.trim());
+      sessionStorage.setItem("rtd_validator_gemini_key", elements.settingsGeminiKey.value.trim());
+      // Clean up localStorage to prevent lingering keys
+      localStorage.removeItem("rtd_validator_openai_key");
+      localStorage.removeItem("rtd_validator_gemini_key");
       elements.aiSettingsModal.classList.remove("open");
       showToast("API keys saved successfully!", "success");
       if (elements.aiToggle.checked) {
@@ -277,6 +296,7 @@
           document.getElementById("status-filename").textContent = activeFile;
           renderAll();
           showToast("Restored progress for " + activeFile, "success");
+          updateStorageDisplay(true);
           return;
         }
       }
@@ -294,6 +314,8 @@
     state.docs = [];
     state.originals = [];
     state.currentIndex = 0;
+    state.schemaArrayTypes = {};
+    state.schemaTemplates = {};
     
     document.getElementById("status-filename").textContent = "No file loaded";
     elements.headerDocTitle.textContent = "Select or upload a dataset";
@@ -454,16 +476,12 @@
           const lines = content.split("\n");
           lines.forEach((line, idx) => {
             const trimmed = line.trim();
-            if (trimmed) {
-              try {
-                parsedDocs.push(JSON.parse(trimmed));
-              } catch (lineErr) {
-                throw new Error(`JSON error on line ${idx + 1}: ${lineErr.message}`);
-              }
+            if (trimmed !== "") {
+              parsedDocs.push(JSON.parse(trimmed));
             }
           });
         } else {
-          // Process normal JSON
+          // Process JSON
           const data = JSON.parse(content);
           if (Array.isArray(data)) {
             parsedDocs.push(...data);
@@ -473,14 +491,14 @@
         }
         
         if (parsedDocs.length === 0) {
-          throw new Error("No valid JSON records found in this file.");
+          throw new Error("No valid JSON records found in the uploaded file");
         }
         
         setDataset(file.name, parsedDocs);
-        showToast(`Successfully uploaded ${file.name} (${parsedDocs.length} items)`, "success");
-        
+        updateStorageDisplay(true);
       } catch (err) {
-        alert(`Error parsing file: ${err.message}`);
+        console.error("File parsing error:", err);
+        showToast("Error parsing file: " + err.message, "flagged");
       }
     };
     reader.readAsText(file);
@@ -645,9 +663,39 @@
     document.getElementById("status-validated").textContent = validatedCount;
     document.getElementById("status-flagged").textContent = flaggedCount;
     
-    // Approximate local storage footprint in KB
-    const lsSize = Math.round(JSON.stringify(state.docs).length / 1024);
-    document.getElementById("status-storage").textContent = `${lsSize} KB`;
+    // Call throttled storage footprint updates
+    updateStorageDisplay(false);
+  }
+
+  // Throttle local storage calculation to improve performance
+  function updateStorageDisplay(immediate = false) {
+    if (immediate) {
+      calculateStorage();
+      return;
+    }
+    if (lsSizeTimer) return;
+    lsSizeTimer = setTimeout(() => {
+      lsSizeTimer = null;
+      calculateStorage();
+    }, 2000);
+  }
+
+  function calculateStorage() {
+    let totalBytes = 0;
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('rtd_validator_')) {
+          totalBytes += (localStorage.getItem(key) || '').length * 2;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not calculate localStorage usage:", e);
+    }
+    const statusStorage = document.getElementById("status-storage");
+    if (statusStorage) {
+      statusStorage.textContent = `${Math.round(totalBytes / 1024)} KB`;
+    }
   }
 
   function renderDocumentList() {
@@ -800,6 +848,18 @@
   async function triggerAiValidation() {
     if (state.docs.length === 0) return;
     
+    // Clear pending debounce timers
+    if (aiValidationTimeout) {
+      clearTimeout(aiValidationTimeout);
+      aiValidationTimeout = null;
+    }
+    
+    // Abort in-flight requests
+    if (aiValidationAbortController) {
+      aiValidationAbortController.abort();
+      aiValidationAbortController = null;
+    }
+    
     const doc = state.docs[state.currentIndex];
     const activeIndexAtStart = state.currentIndex;
     
@@ -860,11 +920,11 @@
     }
     
     // Retrieve keys
-    const openaiKey = localStorage.getItem("rtd_validator_openai_key") || "";
-    const geminiKey = localStorage.getItem("rtd_validator_gemini_key") || "";
+    const openaiKey = sessionStorage.getItem("rtd_validator_openai_key") || localStorage.getItem("rtd_validator_openai_key") || "";
+    const geminiKey = sessionStorage.getItem("rtd_validator_gemini_key") || localStorage.getItem("rtd_validator_gemini_key") || "";
     
     if (!openaiKey && !geminiKey) {
-      console.warn("[AI Validation] No API Keys configured in localStorage.");
+      console.warn("[AI Validation] No API Keys configured.");
       elements.aiInsightsCard.classList.remove("loading", "expanded");
       elements.aiInsightsBadge.className = "ai-insights-badge";
       elements.aiInsightsBadge.textContent = "🤖 AI Warning";
@@ -874,8 +934,7 @@
       return;
     }
     
-    // Set loading state
-    console.log("[AI Validation] Initiating API call...");
+    // Set loading state immediately for user feedback
     elements.aiInsightsCard.classList.add("loading");
     elements.aiInsightsBadge.className = "ai-insights-badge loading";
     elements.aiInsightsBadge.textContent = "⚡ Validating...";
@@ -883,101 +942,127 @@
     elements.aiInsightsContent.style.maxHeight = "0px";
     elements.aiInsightsContent.style.padding = "0 1rem";
     
-    try {
-      // Call validator with only the text field and domain_metadata from the original document
-      const originalDoc = state.originals[state.currentIndex];
-      const origMetaKey = getDomainMetadataKey(originalDoc);
-      const result = await window.AiValidator.validateMetadata(
-        originalDoc.text || "",
-        originalDoc[origMetaKey] || {},
-        openaiKey,
-        geminiKey
-      );
+    // Debounce the validation trigger by 300ms
+    aiValidationTimeout = setTimeout(async () => {
+      aiValidationTimeout = null;
       
-      console.log("[AI Validation] API response received:", result);
+      aiValidationAbortController = new AbortController();
+      const signal = aiValidationAbortController.signal;
       
-      const currentDocAfterCall = state.docs[state.currentIndex];
-      
-      // Extract corrected metadata robustly. LLM might put keys at root or nested under corrected_metadata
-      let corrected = result.corrected_metadata || result.correctedMetadata || result.rawResponse;
-      if (!corrected) {
-        corrected = result;
-      }
-      
-      // If it is a string representation, parse it
-      if (typeof corrected === 'string') {
-        try {
-          corrected = JSON.parse(corrected);
-        } catch (e) {
-          console.warn("[AI Validation] Failed parsing corrected metadata string:", e);
+      try {
+        // Call validator with only the text field and domain_metadata from the original document
+        const originalDoc = state.originals[state.currentIndex];
+        const origMetaKey = getDomainMetadataKey(originalDoc);
+        const result = await window.AiValidator.validateMetadata(
+          originalDoc.text || "",
+          originalDoc[origMetaKey] || {},
+          openaiKey,
+          geminiKey,
+          signal
+        );
+        
+        if (signal.aborted) {
+          console.log("[AI Validation] Request aborted. Suppressing merge.");
+          return;
         }
-      }
-      
-      if (corrected && typeof corrected === 'object') {
-        corrected = JSON.parse(JSON.stringify(corrected));
-        // Remove meta-parameters if LLM placed them at the root
-        const metaKeys = [
-          'corrected_metadata', 'correctedMetadata',
-          'corrections_description', 'correctionsDescription',
-          'chain_of_thought', 'chainOfThought',
-          'source_quotes', 'sourceQuotes',
-          'modelUsed', 'rawResponse'
-        ];
-        metaKeys.forEach(k => delete corrected[k]);
         
-        // Deep clone current metadata and merge the corrected keys defensively
-        const currentMeta = doc[metaKey] ? JSON.parse(JSON.stringify(doc[metaKey])) : {};
-        Object.keys(corrected).forEach(k => {
-          currentMeta[k] = corrected[k];
-        });
+        console.log("[AI Validation] API response received:", result);
         
-        doc[metaKey] = currentMeta;
-        console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc[metaKey]);
-      } else {
-        console.warn("[AI Validation] Could not extract corrected metadata object from API response.");
-      }
-      
-      if (!doc._validation) {
-        doc._validation = { status: "pending", flagged_fields: [] };
-      }
-      doc._validation.ai_insights = {
-        modelUsed: result.modelUsed,
-        corrections_description: result.corrections_description || [],
-        evidence_summary: result.evidence_summary || []
-      };
-      
-      saveToLocalStorage();
-      updateProgressTracker();
-      
-      if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
-        displayAiInsights(doc._validation.ai_insights);
+        const currentDocAfterCall = state.docs[state.currentIndex];
         
-        // Auto-expand card if there are corrections suggested
-        const hasCorrections = Array.isArray(result.corrections_description) && result.corrections_description.length > 0;
-        if (hasCorrections) {
-          console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
-          elements.aiInsightsCard.classList.add("expanded");
+        // Extract corrected metadata robustly. LLM might put keys at root or nested under corrected_metadata
+        let corrected = result.corrected_metadata || result.correctedMetadata || result.rawResponse;
+        if (!corrected) {
+          corrected = result;
+        }
+        
+        // If it is a string representation, parse it
+        if (typeof corrected === 'string') {
+          try {
+            corrected = JSON.parse(corrected);
+          } catch (e) {
+            console.warn("[AI Validation] Failed parsing corrected metadata string:", e);
+          }
+        }
+        
+        if (corrected && typeof corrected === 'object') {
+          corrected = JSON.parse(JSON.stringify(corrected));
+          // Remove meta-parameters if LLM placed them at the root
+          const metaKeys = [
+            'corrected_metadata', 'correctedMetadata',
+            'corrections_description', 'correctionsDescription',
+            'chain_of_thought', 'chainOfThought',
+            'source_quotes', 'sourceQuotes',
+            'modelUsed', 'rawResponse'
+          ];
+          metaKeys.forEach(k => delete corrected[k]);
+          
+          // Deep clone current metadata and merge the corrected keys defensively
+          const currentMeta = doc[metaKey] ? JSON.parse(JSON.stringify(doc[metaKey])) : {};
+          Object.keys(corrected).forEach(k => {
+            // Only merge if the user has not edited this field manually
+            const originalVal = JSON.stringify(originalDoc[origMetaKey]?.[k]);
+            const currentVal = JSON.stringify(doc[metaKey]?.[k]);
+            const userEdited = originalVal !== currentVal;
+            if (!userEdited) {
+              currentMeta[k] = corrected[k];
+            } else {
+              console.log(`[AI Validation] Skipping merge for field '${k}' because it was user-edited.`);
+            }
+          });
+          
+          doc[metaKey] = currentMeta;
+          console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc[metaKey]);
         } else {
-          elements.aiInsightsCard.classList.remove("expanded");
+          console.warn("[AI Validation] Could not extract corrected metadata object from API response.");
         }
         
-        // Refresh form to show the corrected values
-        safeRenderForm(doc, state.originals[state.currentIndex]);
+        if (!doc._validation) {
+          doc._validation = { status: "pending", flagged_fields: [] };
+        }
+        doc._validation.ai_insights = {
+          modelUsed: result.modelUsed,
+          corrections_description: result.corrections_description || [],
+          evidence_summary: result.evidence_summary || []
+        };
         
-        showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
-      } else {
-        console.log("[AI Validation] API returned, but active document changed. Saved state, skipped rendering.");
+        saveToLocalStorage();
+        updateProgressTracker();
+        
+        if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
+          displayAiInsights(doc._validation.ai_insights);
+          
+          // Auto-expand card if there are corrections suggested
+          const hasCorrections = Array.isArray(result.corrections_description) && result.corrections_description.length > 0;
+          if (hasCorrections) {
+            console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
+            elements.aiInsightsCard.classList.add("expanded");
+          } else {
+            elements.aiInsightsCard.classList.remove("expanded");
+          }
+          
+          // Refresh form to show the corrected values
+          safeRenderForm(doc, state.originals[state.currentIndex]);
+          
+          showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
+        } else {
+          console.log("[AI Validation] API returned, but active document changed. Saved state, skipped rendering.");
+        }
+      } catch (err) {
+        if (err.name === 'AbortError' || signal.aborted) {
+          console.log("[AI Validation] Validation call aborted.");
+          return;
+        }
+        console.error("[AI Validation] Validation execution error:", err);
+        const currentDocAfterCall = state.docs[state.currentIndex];
+        if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
+          elements.aiInsightsCard.classList.remove("loading");
+          elements.aiInsightsBadge.className = "ai-insights-badge fallback";
+          elements.aiInsightsBadge.textContent = "❌ AI Error";
+          elements.aiInsightsSummary.textContent = err.message;
+        }
       }
-    } catch (err) {
-      console.error("[AI Validation] Validation execution error:", err);
-      const currentDocAfterCall = state.docs[state.currentIndex];
-      if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
-        elements.aiInsightsCard.classList.remove("loading");
-        elements.aiInsightsBadge.className = "ai-insights-badge fallback";
-        elements.aiInsightsBadge.textContent = "❌ AI Error";
-        elements.aiInsightsSummary.textContent = err.message;
-      }
-    }
+    }, 300);
   }
 
   function displayAiInsights(insights) {
@@ -1031,9 +1116,9 @@
         <tbody>
           ${corrections.map(c => `
             <tr>
-              <td><strong>${c.field || ""}</strong></td>
-              <td>${c.issue || ""}</td>
-              <td><span class="ai-corr-text">${c.correction || ""}</span></td>
+              <td><strong>${escapeHtml(c.field)}</strong></td>
+              <td>${escapeHtml(c.issue)}</td>
+              <td><span class="ai-corr-text">${escapeHtml(c.correction)}</span></td>
             </tr>
           `).join("")}
         </tbody>
@@ -1063,8 +1148,8 @@
         <tbody>
           ${evidence.map(e => `
             <tr>
-              <td style="width: 30%;"><strong>${e.field || ""}</strong></td>
-              <td style="font-style: italic; color: var(--text-muted); font-size: 0.8rem;">"${e.supporting_text || ""}"</td>
+              <td style="width: 30%;"><strong>${escapeHtml(e.field)}</strong></td>
+              <td style="font-style: italic; color: var(--text-muted); font-size: 0.8rem;">"${escapeHtml(e.supporting_text)}"</td>
             </tr>
           `).join("")}
         </tbody>

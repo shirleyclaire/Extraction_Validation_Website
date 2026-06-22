@@ -77,11 +77,17 @@ window.FormBuilder = (function() {
   // Compare values at a path between originalDoc and current copy to see if modified
   function isFieldModified(originalDoc, path, currentVal) {
     if (!originalDoc) return false;
-    const origVal = getValueByPath(originalDoc, path);
-    if (origVal === undefined) return false;
     
     // Ignore comparison for _validation metadata or internal keys
     if (path.includes('_validation') || path.startsWith('_')) return false;
+
+    const origVal = getValueByPath(originalDoc, path);
+    if (origVal === undefined) {
+      if (currentVal === undefined || currentVal === null || currentVal === '') return false;
+      if (Array.isArray(currentVal) && currentVal.length === 0) return false;
+      if (typeof currentVal === 'object' && Object.keys(currentVal).length === 0) return false;
+      return true;
+    }
 
     // Compare origVal and currentVal
     if (typeof origVal !== typeof currentVal) return true;
@@ -153,6 +159,9 @@ window.FormBuilder = (function() {
   }
 
   function render(doc, container, onChange, arrayTypes, arrayTemplates, originalDoc) {
+    const panelBody = (container && typeof container.closest === 'function') ? container.closest('.panel-body') : null;
+    const scrollTop = panelBody ? panelBody.scrollTop : 0;
+
     container.innerHTML = '';
     
     // Create local clone of data to work with
@@ -172,6 +181,10 @@ window.FormBuilder = (function() {
     });
     
     container.appendChild(formRoot);
+
+    if (panelBody) {
+      panelBody.scrollTop = scrollTop;
+    }
   }
 
   function buildFormNode(val, path, labelName, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc) {
@@ -298,6 +311,8 @@ window.FormBuilder = (function() {
           // Delete row cell
           const tdDelete = document.createElement('td');
           tdDelete.className = 'spreadsheet-row-actions';
+          const innerDiv = document.createElement('div');
+          innerDiv.className = 'spreadsheet-row-actions-inner';
           const delBtn = document.createElement('button');
           delBtn.className = 'spreadsheet-btn delete';
           delBtn.title = "Delete this table row";
@@ -310,7 +325,8 @@ window.FormBuilder = (function() {
             // Re-render form
             render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
           });
-          tdDelete.appendChild(delBtn);
+          innerDiv.appendChild(delBtn);
+          tdDelete.appendChild(innerDiv);
           tr.appendChild(tdDelete);
           tbody.appendChild(tr);
         });
@@ -555,18 +571,6 @@ window.FormBuilder = (function() {
         const toggleInput = document.createElement('input');
         toggleInput.type = 'checkbox';
         toggleInput.checked = val;
-        toggleInput.addEventListener('change', (e) => {
-          setValueByPath(docCopy, path, e.target.checked);
-          onChange(docCopy);
-          
-          const isMod = isFieldModified(originalDoc, path, e.target.checked);
-          if (isMod) {
-            group.classList.add('modified');
-          } else {
-            group.classList.remove('modified');
-          }
-        });
-        
         const slider = document.createElement('span');
         slider.className = 'toggle-slider';
         
@@ -580,7 +584,17 @@ window.FormBuilder = (function() {
         stateText.textContent = val ? 'Yes' : 'No';
         
         toggleInput.addEventListener('change', (e) => {
-          stateText.textContent = e.target.checked ? 'Yes' : 'No';
+          const checked = e.target.checked;
+          setValueByPath(docCopy, path, checked);
+          stateText.textContent = checked ? 'Yes' : 'No';
+          onChange(docCopy);
+          
+          const isMod = isFieldModified(originalDoc, path, checked);
+          if (isMod) {
+            group.classList.add('modified');
+          } else {
+            group.classList.remove('modified');
+          }
         });
         
         controlWrapper.appendChild(toggleLabel);

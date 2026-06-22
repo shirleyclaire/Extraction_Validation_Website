@@ -924,11 +924,15 @@ input:checked + .toggle-slider:before {
 }
 
 .spreadsheet-row-actions {
+  padding: 0.25rem;
+  text-align: center;
+}
+
+.spreadsheet-row-actions-inner {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  padding: 0.25rem;
 }
 
 .spreadsheet-btn {
@@ -1412,24 +1416,24 @@ input:checked + .toggle-slider:before {
   border-collapse: collapse;
   margin-top: 0.5rem;
   font-size: 0.825rem;
-  background-color: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: #fff;
+  border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
 }
 
 .ai-insights-table th {
-  background-color: rgba(30, 64, 175, 0.2);
-  color: #fff;
+  background-color: var(--primary-light);
+  color: var(--primary);
   font-weight: 600;
   text-align: left;
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(30, 64, 175, 0.2);
 }
 
 .ai-insights-table td {
   padding: 0.6rem 0.75rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--border-light);
   color: var(--text-main);
   vertical-align: top;
 }
