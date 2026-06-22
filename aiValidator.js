@@ -23,7 +23,12 @@ window.AiValidator = (function () {
 
 Your task is NOT to enrich metadata aggressively.
 
-Your primary task is to VALIDATE whether each field in the provided "domain_metadata" is explicitly supported by the supplied text chunk.
+Your primary task is to VALIDATE whether each field in the provided "domain_metadata" is correct and explicitly supported by the supplied text chunk.
+
+DEFINITION OF "CORRECT" VALUE:
+- A field value in the metadata is correct if and only if it is explicitly stated in the provided text chunk. 
+- Any value in the original metadata that is incorrect, unsupported, or missing from the text chunk must be corrected or set to null, empty string "", or empty array [] depending on its type.
+- Do NOT assume standard domain conventions or default settings. For example, do not assume "pulse injection" was used as the injection method or that "colored dyes" were used as the tracer just because they are common in RTD literature, unless the text chunk explicitly states this. If the text does not mention them, set the value to null or empty.
 
 IMPORTANT PRINCIPLES
 
@@ -151,10 +156,7 @@ Return ONLY valid JSON.
   ]
 }
 
-DO NOT include chain-of-thought.
-DO NOT explain your internal reasoning.
-DO NOT return markdown.
-DO NOT return any text outside the JSON object.`;
+Return only the raw JSON object conforming to the schema above, with no extra text, explanations, or wrapper.`;
 
   async function callOpenAI(text, domainMetadata, apiKey) {
     const userPrompt = `Research Paper Text Chunk:

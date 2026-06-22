@@ -13,6 +13,15 @@
     schemaTemplates: {}
   };
 
+  // Helper to dynamically get domain metadata key (handles domain_metadata and Domain_metadata)
+  function getDomainMetadataKey(doc) {
+    if (!doc) return "domain_metadata";
+    if (doc.Domain_metadata !== undefined) return "Domain_metadata";
+    if (doc.domain_metadata !== undefined) return "domain_metadata";
+    const foundKey = Object.keys(doc).find(k => k.toLowerCase() === 'domain_metadata');
+    return foundKey || "domain_metadata";
+  }
+
   // DOM Elements
   let elements = {};
 
@@ -804,14 +813,19 @@
       return;
     }
     
+    const metaKey = getDomainMetadataKey(doc);
+    console.log("[AI Validation] Resolved metadata key:", metaKey);
+    console.log("[AI Validation] doc[metaKey] defined:", doc[metaKey] !== undefined);
+    console.log("[AI Validation] doc.text defined:", doc.text !== undefined);
+    
     // Check if document has domain_metadata and text
-    if (doc.domain_metadata === undefined || doc.text === undefined) {
-      console.warn("[AI Validation] Current document schema does not support AI validation (missing domain_metadata or text).");
+    if (doc[metaKey] === undefined || doc.text === undefined) {
+      console.warn("[AI Validation] Current document schema does not support AI validation (missing " + metaKey + " or text).");
       elements.aiInsightsCard.style.display = "block";
       elements.aiInsightsCard.classList.remove("loading", "expanded");
       elements.aiInsightsBadge.className = "ai-insights-badge";
       elements.aiInsightsBadge.textContent = "🤖 AI Insights";
-      elements.aiInsightsSummary.textContent = "AI validation is only supported for schemas with 'text' and 'domain_metadata'.";
+      elements.aiInsightsSummary.textContent = "AI validation is only supported for schemas with 'text' and '" + metaKey + "'.";
       elements.aiInsightsContent.style.maxHeight = "0px";
       elements.aiInsightsContent.style.padding = "0 1rem";
       return;
@@ -822,14 +836,26 @@
     // Check if already validated and cached
     if (doc._validation && doc._validation.ai_insights) {
       const insights = doc._validation.ai_insights;
-      // Force re-validation if it's in the old format (e.g. has chain_of_thought or lacks evidence_summary)
-      const isOldFormat = insights.chain_of_thought !== undefined || insights.evidence_summary === undefined;
+      // Force re-validation if it's in the old format (e.g. has chain_of_thought or lacks evidence_summary or modelUsed)
+      const isOldFormat = !insights || insights.chain_of_thought !== undefined || insights.evidence_summary === undefined || !insights.modelUsed;
       if (!isOldFormat) {
         console.log("[AI Validation] Found cached AI insights. Rendering card directly.");
-        displayAiInsights(insights);
-        return;
+        try {
+          displayAiInsights(insights);
+          
+          // Auto-expand if corrections exist
+          const hasCorrections = Array.isArray(insights.corrections_description) && insights.corrections_description.length > 0;
+          if (hasCorrections) {
+            elements.aiInsightsCard.classList.add("expanded");
+          } else {
+            elements.aiInsightsCard.classList.remove("expanded");
+          }
+          return;
+        } catch (err) {
+          console.warn("[AI Validation] Failed rendering cached insights. Re-validating...", err);
+        }
       } else {
-        console.log("[AI Validation] Cached insights are in the old format. Re-validating document...");
+        console.log("[AI Validation] Cached insights are in the old format or lack model information. Re-validating document...");
       }
     }
     
@@ -860,9 +886,10 @@
     try {
       // Call validator with only the text field and domain_metadata from the original document
       const originalDoc = state.originals[state.currentIndex];
+      const origMetaKey = getDomainMetadataKey(originalDoc);
       const result = await window.AiValidator.validateMetadata(
         originalDoc.text || "",
-        originalDoc.domain_metadata || {},
+        originalDoc[origMetaKey] || {},
         openaiKey,
         geminiKey
       );
@@ -899,13 +926,13 @@
         metaKeys.forEach(k => delete corrected[k]);
         
         // Deep clone current metadata and merge the corrected keys defensively
-        const currentMeta = doc.domain_metadata ? JSON.parse(JSON.stringify(doc.domain_metadata)) : {};
+        const currentMeta = doc[metaKey] ? JSON.parse(JSON.stringify(doc[metaKey])) : {};
         Object.keys(corrected).forEach(k => {
           currentMeta[k] = corrected[k];
         });
         
-        doc.domain_metadata = currentMeta;
-        console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc.domain_metadata);
+        doc[metaKey] = currentMeta;
+        console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc[metaKey]);
       } else {
         console.warn("[AI Validation] Could not extract corrected metadata object from API response.");
       }
@@ -957,11 +984,23 @@
     console.log("[AI Validation] Rendering AI insights card display values.");
     elements.aiInsightsCard.style.display = "block"; // Explicitly ensure visibility
     elements.aiInsightsCard.classList.remove("loading");
+    
+    // Scroll the panel back to top so the card is visible
+    elements.aiInsightsCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    
+    if (!insights) {
+      elements.aiInsightsBadge.className = "ai-insights-badge fallback";
+      elements.aiInsightsBadge.textContent = "🤖 AI Warning";
+      elements.aiInsightsSummary.textContent = "No insights found.";
+      return;
+    }
+    
+    const modelUsed = insights.modelUsed || "AI Assistant";
     elements.aiInsightsBadge.className = "ai-insights-badge";
-    if (insights.modelUsed.includes("Fallback") || insights.modelUsed === "Gemini") {
+    if (modelUsed.includes("Fallback") || modelUsed === "Gemini") {
       elements.aiInsightsBadge.classList.add("fallback");
     }
-    elements.aiInsightsBadge.textContent = `🤖 ${insights.modelUsed}`;
+    elements.aiInsightsBadge.textContent = `🤖 ${modelUsed}`;
     
     // Summarize corrections count
     let summaryText = "";

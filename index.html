@@ -8,8 +8,47 @@
   <!-- KaTeX CSS for beautiful math rendering -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
   
+  <!-- Global JS Error Diagnostic Logger -->
+  <script>
+    window.addEventListener('error', function(e) {
+      const errDiv = document.createElement('div');
+      errDiv.style.position = 'fixed';
+      errDiv.style.top = '0';
+      errDiv.style.left = '0';
+      errDiv.style.right = '0';
+      errDiv.style.backgroundColor = '#ef4444';
+      errDiv.style.color = '#fff';
+      errDiv.style.padding = '12px 20px';
+      errDiv.style.zIndex = '999999';
+      errDiv.style.fontFamily = 'monospace';
+      errDiv.style.fontSize = '12px';
+      errDiv.style.whiteSpace = 'pre-wrap';
+      errDiv.style.boxShadow = '0 4px 10px rgba(0,0,0,0.3)';
+      errDiv.innerHTML = '<strong>⚠️ JavaScript Error Detected:</strong><br>' + 
+                          e.message + '<br>' + 
+                          'File: ' + e.filename + ' (Line ' + e.lineno + ')<br>' +
+                          'Stack: <pre style="margin-top:5px; background:rgba(0,0,0,0.2); padding:5px; border-radius:4px;">' + (e.error ? e.error.stack : 'N/A') + '</pre>';
+      
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = '❌ Close';
+      closeBtn.style.position = 'absolute';
+      closeBtn.style.right = '10px';
+      closeBtn.style.top = '10px';
+      closeBtn.style.background = 'rgba(255,255,255,0.2)';
+      closeBtn.style.border = 'none';
+      closeBtn.style.color = '#fff';
+      closeBtn.style.cursor = 'pointer';
+      closeBtn.style.borderRadius = '4px';
+      closeBtn.style.padding = '2px 6px';
+      closeBtn.addEventListener('click', () => errDiv.remove());
+      errDiv.appendChild(closeBtn);
+      
+      document.body.appendChild(errDiv);
+    });
+  </script>
+  
   <!-- Core Design CSS -->
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=5">
   
   <!-- KaTeX JS (defer to load asynchronously) -->
   <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
@@ -159,7 +198,7 @@
               </div>
               <span class="ai-insights-toggle-icon" id="ai-insights-toggle-icon">▼</span>
             </div>
-            <div class="ai-insights-content collapsed" id="ai-insights-content">
+            <div class="ai-insights-content" id="ai-insights-content">
               <div class="ai-insight-section">
                 <h4>⚠️ Suggested Corrections</h4>
                 <div id="ai-insight-corrections"></div>
@@ -171,7 +210,7 @@
             </div>
           </div>
           
-          <form id="editor-form" onsubmit="event.preventDefault();" style="flex: 1;">
+          <form id="editor-form" onsubmit="event.preventDefault();">
             <span style="color: var(--text-light); font-style: italic;">Select a document to begin validation.</span>
           </form>
         </div>
@@ -275,9 +314,9 @@
   </div>
 
   <!-- Core Scripts -->
-  <script src="jsonViewer.js"></script>
-  <script src="aiValidator.js"></script>
-  <script src="formBuilder.js"></script>
-  <script src="app.js"></script>
+  <script src="jsonViewer.js?v=5"></script>
+  <script src="aiValidator.js?v=5"></script>
+  <script src="formBuilder.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
