@@ -8,7 +8,10 @@ window.FormBuilder = (function() {
     let current = obj;
     for (let part of parts) {
       if (current === null || current === undefined) return undefined;
-      current = current[part];
+      // Case-insensitive key lookup to prevent casing mismatch issues
+      const foundKey = Object.keys(current).find(k => k.toLowerCase() === part.toLowerCase());
+      if (foundKey === undefined) return undefined;
+      current = current[foundKey];
     }
     return current;
   }
@@ -18,23 +21,34 @@ window.FormBuilder = (function() {
     let current = obj;
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (current[part] === undefined || current[part] === null) {
+      let foundKey = Object.keys(current).find(k => k.toLowerCase() === part.toLowerCase());
+      if (foundKey === undefined) {
         const nextPartIsIndex = !isNaN(parts[i+1]);
         current[part] = nextPartIsIndex ? [] : {};
+        foundKey = part;
       }
-      current = current[part];
+      current = current[foundKey];
     }
-    current[parts[parts.length - 1]] = value;
+    const lastPart = parts[parts.length - 1];
+    let lastKey = Object.keys(current).find(k => k.toLowerCase() === lastPart.toLowerCase());
+    if (lastKey === undefined) {
+      lastKey = lastPart;
+    }
+    current[lastKey] = value;
   }
 
   function deleteValueByPath(obj, path) {
     const parts = path.split('.');
     let current = obj;
     for (let i = 0; i < parts.length - 1; i++) {
-      current = current[parts[i]];
-      if (!current) return;
+      const part = parts[i];
+      const foundKey = Object.keys(current).find(k => k.toLowerCase() === part.toLowerCase());
+      if (foundKey === undefined) return;
+      current = current[foundKey];
     }
-    const lastKey = parts[parts.length - 1];
+    const lastPart = parts[parts.length - 1];
+    const lastKey = Object.keys(current).find(k => k.toLowerCase() === lastPart.toLowerCase());
+    if (lastKey === undefined) return;
     if (Array.isArray(current)) {
       current.splice(Number(lastKey), 1);
     } else {
@@ -82,12 +96,15 @@ window.FormBuilder = (function() {
     if (path.includes('_validation') || path.startsWith('_')) return false;
 
     const origVal = getValueByPath(originalDoc, path);
-    if (origVal === undefined) {
-      if (currentVal === undefined || currentVal === null || currentVal === '') return false;
-      if (Array.isArray(currentVal) && currentVal.length === 0) return false;
-      if (typeof currentVal === 'object' && Object.keys(currentVal).length === 0) return false;
-      return true;
-    }
+    
+    // Treat null, undefined, empty string, empty array, and empty object as equivalent empty values
+    const isEmpty = (v) => v === undefined || v === null || v === '' || 
+                           (Array.isArray(v) && v.length === 0) ||
+                           (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+    
+    if (isEmpty(origVal) && isEmpty(currentVal)) return false;
+
+    if (origVal === undefined) return true;
 
     // Compare origVal and currentVal
     if (typeof origVal !== typeof currentVal) return true;

@@ -1297,6 +1297,7 @@ input:checked + .toggle-slider:before {
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: all 0.3s ease;
+  flex-shrink: 0;
 }
 
 .ai-insights-card.loading {
@@ -1385,10 +1386,9 @@ input:checked + .toggle-slider:before {
 }
 
 .ai-insights-card.expanded .ai-insights-content {
-  max-height: 800px;
+  max-height: 2000px;
   padding: 0.5rem 1rem 1rem;
   border-top: 1px solid rgba(30, 64, 175, 0.1);
-  overflow-y: auto;
 }
 
 .ai-insight-section {

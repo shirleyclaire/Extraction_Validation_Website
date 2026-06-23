@@ -508,6 +508,11 @@
   function selectDocument(index) {
     state.currentIndex = index;
     localStorage.setItem(`rtd_validator_index_${state.fileName}`, index);
+    
+    // Reset scroll positions of panels to top when switching documents
+    const panels = document.querySelectorAll(".panel-body");
+    panels.forEach(p => p.scrollTop = 0);
+    
     renderActiveDocument();
     
     // Highlight sidebar active item
@@ -886,8 +891,6 @@
       elements.aiInsightsBadge.className = "ai-insights-badge";
       elements.aiInsightsBadge.textContent = "🤖 AI Insights";
       elements.aiInsightsSummary.textContent = "AI validation is only supported for schemas with 'text' and '" + metaKey + "'.";
-      elements.aiInsightsContent.style.maxHeight = "0px";
-      elements.aiInsightsContent.style.padding = "0 1rem";
       return;
     }
     
@@ -929,8 +932,6 @@
       elements.aiInsightsBadge.className = "ai-insights-badge";
       elements.aiInsightsBadge.textContent = "🤖 AI Warning";
       elements.aiInsightsSummary.textContent = "API Keys missing. Click 'API Keys' in the sidebar to configure.";
-      elements.aiInsightsContent.style.maxHeight = "0px";
-      elements.aiInsightsContent.style.padding = "0 1rem";
       return;
     }
     
@@ -939,8 +940,6 @@
     elements.aiInsightsBadge.className = "ai-insights-badge loading";
     elements.aiInsightsBadge.textContent = "⚡ Validating...";
     elements.aiInsightsSummary.textContent = "AI is reviewing the domain metadata against the source text...";
-    elements.aiInsightsContent.style.maxHeight = "0px";
-    elements.aiInsightsContent.style.padding = "0 1rem";
     
     // Debounce the validation trigger by 300ms
     aiValidationTimeout = setTimeout(async () => {
@@ -1030,6 +1029,9 @@
         updateProgressTracker();
         
         if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
+          // Refresh form to show the corrected values first
+          safeRenderForm(doc, state.originals[state.currentIndex]);
+          
           displayAiInsights(doc._validation.ai_insights);
           
           // Auto-expand card if there are corrections suggested
@@ -1040,9 +1042,6 @@
           } else {
             elements.aiInsightsCard.classList.remove("expanded");
           }
-          
-          // Refresh form to show the corrected values
-          safeRenderForm(doc, state.originals[state.currentIndex]);
           
           showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
         } else {
