@@ -27,6 +27,12 @@
     return foundKey || "domain_metadata";
   }
 
+  // Case-insensitive key lookup helper
+  function getCaseInsensitiveKey(obj, key) {
+    if (!obj || typeof obj !== 'object') return undefined;
+    return Object.keys(obj).find(k => k.toLowerCase() === key.toLowerCase());
+  }
+
   // HTML escape helper to mitigate XSS
   function escapeHtml(str) {
     if (str === null || str === undefined) return "";
@@ -785,6 +791,19 @@
   function renderActiveDocument() {
     if (state.docs.length === 0) return;
     
+    // Reset AI insights card state immediately when rendering a new document to prevent leftover display
+    if (elements.aiToggle && elements.aiToggle.checked) {
+      elements.aiInsightsCard.style.display = "block";
+      elements.aiInsightsCard.classList.remove("loading", "expanded");
+      elements.aiInsightsBadge.className = "ai-insights-badge";
+      elements.aiInsightsBadge.textContent = "🤖 AI Insights";
+      elements.aiInsightsSummary.textContent = "AI is reviewing the domain metadata...";
+      elements.aiInsightCorrections.innerHTML = "";
+      elements.aiInsightQuotes.innerHTML = "";
+    } else if (elements.aiInsightsCard) {
+      elements.aiInsightsCard.style.display = "none";
+    }
+    
     const doc = state.docs[state.currentIndex];
     const original = state.originals[state.currentIndex];
     
@@ -878,6 +897,10 @@
       return;
     }
     
+    // Clear previous results/quotes to avoid showing leftover data
+    elements.aiInsightCorrections.innerHTML = "";
+    elements.aiInsightQuotes.innerHTML = "";
+    
     const metaKey = getDomainMetadataKey(doc);
     console.log("[AI Validation] Resolved metadata key:", metaKey);
     console.log("[AI Validation] doc[metaKey] defined:", doc[metaKey] !== undefined);
@@ -905,14 +928,6 @@
         console.log("[AI Validation] Found cached AI insights. Rendering card directly.");
         try {
           displayAiInsights(insights);
-          
-          // Auto-expand if corrections exist
-          const hasCorrections = Array.isArray(insights.corrections_description) && insights.corrections_description.length > 0;
-          if (hasCorrections) {
-            elements.aiInsightsCard.classList.add("expanded");
-          } else {
-            elements.aiInsightsCard.classList.remove("expanded");
-          }
           return;
         } catch (err) {
           console.warn("[AI Validation] Failed rendering cached insights. Re-validating...", err);
@@ -999,12 +1014,23 @@
           // Deep clone current metadata and merge the corrected keys defensively
           const currentMeta = doc[metaKey] ? JSON.parse(JSON.stringify(doc[metaKey])) : {};
           Object.keys(corrected).forEach(k => {
-            // Only merge if the user has not edited this field manually
-            const originalVal = JSON.stringify(originalDoc[origMetaKey]?.[k]);
-            const currentVal = JSON.stringify(doc[metaKey]?.[k]);
+            // Case-insensitive key lookup in original and current metadata
+            const origKey = getCaseInsensitiveKey(originalDoc[origMetaKey], k);
+            const currentKey = getCaseInsensitiveKey(doc[metaKey], k);
+            
+            const originalVal = origKey !== undefined ? JSON.stringify(originalDoc[origMetaKey][origKey]) : undefined;
+            const currentVal = currentKey !== undefined ? JSON.stringify(doc[metaKey][currentKey]) : undefined;
             const userEdited = originalVal !== currentVal;
+            
             if (!userEdited) {
-              currentMeta[k] = corrected[k];
+              const targetKey = currentKey || origKey || k;
+              // Clean up other casings of the same key in currentMeta to avoid duplicate key properties
+              Object.keys(currentMeta).forEach(existingKey => {
+                if (existingKey.toLowerCase() === targetKey.toLowerCase() && existingKey !== targetKey) {
+                  delete currentMeta[existingKey];
+                }
+              });
+              currentMeta[targetKey] = corrected[k];
             } else {
               console.log(`[AI Validation] Skipping merge for field '${k}' because it was user-edited.`);
             }
@@ -1033,15 +1059,6 @@
           safeRenderForm(doc, state.originals[state.currentIndex]);
           
           displayAiInsights(doc._validation.ai_insights);
-          
-          // Auto-expand card if there are corrections suggested
-          const hasCorrections = Array.isArray(result.corrections_description) && result.corrections_description.length > 0;
-          if (hasCorrections) {
-            console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
-            elements.aiInsightsCard.classList.add("expanded");
-          } else {
-            elements.aiInsightsCard.classList.remove("expanded");
-          }
           
           showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
         } else {
@@ -1076,8 +1093,124 @@
       elements.aiInsightsBadge.className = "ai-insights-badge fallback";
       elements.aiInsightsBadge.textContent = "🤖 AI Warning";
       elements.aiInsightsSummary.textContent = "No insights found.";
+      elements.aiInsightsCard.classList.remove("expanded");
       return;
     }
+    
+    const originalDoc = state.originals[state.currentIndex];
+    const doc = state.docs[state.currentIndex];
+    const origMetaKey = getDomainMetadataKey(originalDoc);
+    const metaKey = getDomainMetadataKey(doc);
+    
+    // Recursive diff helper to find actual modifications
+    function getDiffs(orig, current, path = "") {
+      const diffs = [];
+      const isEmpty = (v) => v === undefined || v === null || v === '' || 
+                             (Array.isArray(v) && v.length === 0) ||
+                             (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+                             
+      if (isEmpty(orig) && isEmpty(current)) {
+        return diffs;
+      }
+      if (orig === undefined || orig === null || current === undefined || current === null) {
+        if (orig !== current) {
+          diffs.push({ field: path, oldVal: orig, newVal: current });
+        }
+        return diffs;
+      }
+      if (typeof orig !== typeof current) {
+        diffs.push({ field: path, oldVal: orig, newVal: current });
+        return diffs;
+      }
+      
+      if (Array.isArray(orig) && Array.isArray(current)) {
+        if (JSON.stringify(orig) !== JSON.stringify(current)) {
+          diffs.push({ field: path, oldVal: orig, newVal: current });
+        }
+      } else if (typeof orig === 'object' && typeof current === 'object') {
+        // Collect union of keys case-insensitively
+        const keysMap = new Map();
+        Object.keys(orig).forEach(k => {
+          if (k.startsWith('_')) return;
+          keysMap.set(k.toLowerCase(), { origKey: k });
+        });
+        Object.keys(current).forEach(k => {
+          if (k.startsWith('_')) return;
+          const lower = k.toLowerCase();
+          if (keysMap.has(lower)) {
+            keysMap.get(lower).currentKey = k;
+          } else {
+            keysMap.set(lower, { currentKey: k });
+          }
+        });
+        
+        keysMap.forEach((keysInfo, lowerKey) => {
+          const origKey = keysInfo.origKey || keysInfo.currentKey;
+          const currentKey = keysInfo.currentKey || keysInfo.origKey;
+          const childPath = path ? `${path}.${origKey}` : origKey;
+          diffs.push(...getDiffs(orig[origKey], current[currentKey], childPath));
+        });
+      } else {
+        if (orig !== current) {
+          diffs.push({ field: path, oldVal: orig, newVal: current });
+        }
+      }
+      return diffs;
+    }
+    
+    const actualDiffs = getDiffs(originalDoc[origMetaKey], doc[metaKey]);
+    
+    // Normalize path for matching (converts casing and strips domain_metadata prefix)
+    function normalizePath(p) {
+      if (!p) return "";
+      return String(p).toLowerCase()
+        .replace(/^(domain_metadata|domainmetadata)\./, "")
+        .trim();
+    }
+    
+    const corrections = [];
+    const llmCorrections = insights.corrections_description || [];
+    
+    actualDiffs.forEach(diff => {
+      const normalizedDiffField = normalizePath(diff.field);
+      const match = Array.isArray(llmCorrections) ? llmCorrections.find(c => normalizePath(c.field) === normalizedDiffField) : null;
+      
+      if (match) {
+        corrections.push({
+          field: diff.field,
+          issue: match.issue,
+          correction: match.correction || (typeof diff.newVal === 'object' ? JSON.stringify(diff.newVal) : String(diff.newVal))
+        });
+      } else {
+        // Fallback explanation if LLM didn't return it in corrections_description
+        const isEmptyVal = (v) => v === undefined || v === null || v === '' || 
+                                 (Array.isArray(v) && v.length === 0) ||
+                                 (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+        let issue = "";
+        if (isEmptyVal(diff.oldVal)) {
+          issue = "Original value was empty; AI extracted new value from text.";
+        } else if (isEmptyVal(diff.newVal)) {
+          issue = "AI removed unsupported value.";
+        } else {
+          issue = `AI updated value from "${diff.oldVal}" to "${diff.newVal}".`;
+        }
+        
+        let corrStr = "";
+        if (diff.newVal === null || diff.newVal === undefined) {
+          corrStr = "null";
+        } else if (typeof diff.newVal === 'object') {
+          corrStr = JSON.stringify(diff.newVal);
+        } else {
+          corrStr = String(diff.newVal);
+        }
+        
+        corrections.push({
+          field: diff.field,
+          issue: issue,
+          correction: corrStr
+        });
+      }
+    });
     
     const modelUsed = insights.modelUsed || "AI Assistant";
     elements.aiInsightsBadge.className = "ai-insights-badge";
@@ -1088,28 +1221,34 @@
     
     // Summarize corrections count
     let summaryText = "";
-    const corrections = insights.corrections_description || [];
-    
-    if (Array.isArray(corrections) && corrections.length > 0) {
+    if (corrections.length > 0) {
       summaryText = `AI suggested ${corrections.length} correction${corrections.length > 1 ? 's' : ''}. Review below. (Click to expand)`;
     } else {
       summaryText = "Metadata is verified! No corrections needed. (Click to view details)";
     }
     elements.aiInsightsSummary.textContent = summaryText;
     
+    // Auto-expand card if corrections actually exist
+    if (corrections.length > 0) {
+      console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
+      elements.aiInsightsCard.classList.add("expanded");
+    } else {
+      elements.aiInsightsCard.classList.remove("expanded");
+    }
+    
     // Render corrections table
     const corrContainer = elements.aiInsightCorrections;
     corrContainer.innerHTML = "";
     
-    if (Array.isArray(corrections) && corrections.length > 0) {
+    if (corrections.length > 0) {
       const table = document.createElement("table");
       table.className = "ai-insights-table";
       table.innerHTML = `
         <thead>
           <tr>
-            <th>Field Path</th>
-            <th>Issue Found</th>
-            <th>Correction Applied</th>
+            <th style="width: 35%;">Field Path</th>
+            <th style="width: 35%;">Issue Found</th>
+            <th style="width: 30%;">Correction Applied</th>
           </tr>
         </thead>
         <tbody>
@@ -1123,8 +1262,6 @@
         </tbody>
       `;
       corrContainer.appendChild(table);
-    } else if (typeof corrections === 'string' && corrections.trim() !== "") {
-      corrContainer.textContent = corrections;
     } else {
       corrContainer.innerHTML = '<span class="ai-no-changes">No incorrect extractions detected. Everything is correct!</span>';
     }
@@ -1140,14 +1277,14 @@
       table.innerHTML = `
         <thead>
           <tr>
-            <th>Field Path</th>
-            <th>Specific Quote</th>
+            <th style="width: 35%;">Field Path</th>
+            <th style="width: 65%;">Specific Quote</th>
           </tr>
         </thead>
         <tbody>
           ${evidence.map(e => `
             <tr>
-              <td style="width: 30%;"><strong>${escapeHtml(e.field)}</strong></td>
+              <td><strong>${escapeHtml(e.field)}</strong></td>
               <td style="font-style: italic; color: var(--text-muted); font-size: 0.8rem;">"${escapeHtml(e.supporting_text)}"</td>
             </tr>
           `).join("")}
