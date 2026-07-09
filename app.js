@@ -1302,19 +1302,25 @@
   function downloadData(format) {
     if (state.docs.length === 0) return;
 
+    const validatedDocs = state.docs.filter(doc => doc._validation && doc._validation.status === "validated");
+    if (validatedDocs.length === 0) {
+      showToast("No documents have been validated yet! Mark at least one document as validated before exporting.", "flagged");
+      return;
+    }
+
     let content = "";
     let fileExtension = "";
     let mimeType = "";
 
     if (format === "jsonl") {
       // Export line-by-line JSON
-      const lines = state.docs.map(doc => JSON.stringify(doc));
+      const lines = validatedDocs.map(doc => JSON.stringify(doc));
       content = lines.join("\n");
       fileExtension = ".jsonl";
       mimeType = "application/x-jsonlines";
     } else {
       // Export pretty-printed JSON list
-      content = JSON.stringify(state.docs, null, 2);
+      content = JSON.stringify(validatedDocs, null, 2);
       fileExtension = ".json";
       mimeType = "application/json";
     }
@@ -1332,7 +1338,7 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    showToast(`Downloaded verified dataset in ${format.toUpperCase()} format!`, "success");
+    showToast(`Downloaded ${validatedDocs.length} validated record(s) in ${format.toUpperCase()} format!`, "success");
   }
 
   // Toast notifications
