@@ -16,6 +16,13 @@ window.FormBuilder = (function() {
     return current;
   }
 
+  function getCaseInsensitiveValue(obj, path) {
+    if (!obj || !path) return undefined;
+    const lowerPath = path.toLowerCase();
+    const foundKey = Object.keys(obj).find(k => k.toLowerCase() === lowerPath);
+    return foundKey !== undefined ? obj[foundKey] : undefined;
+  }
+
   function setValueByPath(obj, path, value) {
     const parts = path.split('.');
     let current = obj;
@@ -258,8 +265,24 @@ window.FormBuilder = (function() {
     const controlWrapper = document.createElement('div');
     controlWrapper.className = 'form-control-wrapper';
     
-    const isArray = Array.isArray(val);
-    const isObject = typeof val === 'object' && val !== null;
+    const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
+    
+    // Check if the current value is an array or if the schema analyzer learned that it is an array
+    const isArray = Array.isArray(val) || 
+                    (arrayTypes && getCaseInsensitiveValue(arrayTypes, normPath) !== undefined);
+                    
+    // If it's an array but the current value is not an array, initialize it to empty list for rendering
+    if (isArray && !Array.isArray(val)) {
+      val = [];
+    }
+
+    const templateValForObj = getCaseInsensitiveValue(arrayTemplates, normPath);
+    const isObject = (!isArray && typeof val === 'object' && val !== null) ||
+                     (!isArray && templateValForObj && typeof templateValForObj === 'object' && templateValForObj !== null && !Array.isArray(templateValForObj));
+                     
+    if (isObject && (typeof val !== 'object' || val === null)) {
+      val = {};
+    }
     
     if (isArray) {
       // 1. Is it a spreadsheet table? (2D Array with sibling headers)
@@ -369,9 +392,9 @@ window.FormBuilder = (function() {
         
       } else {
         // 2. Is it a list of objects?
-        const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
-        const isObjectList = (arrayTypes && arrayTypes[normPath] === 'object') ||
-                             (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0]));
+        const isObjectList = (arrayTypes && getCaseInsensitiveValue(arrayTypes, normPath) === 'object') ||
+                             (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])) ||
+                             normPath.toLowerCase().endsWith('rtd_functions_discussed');
         
         if (isObjectList) {
           const listWrapper = document.createElement('div');
@@ -455,10 +478,10 @@ window.FormBuilder = (function() {
           addItemBtn.addEventListener('click', (e) => {
             e.preventDefault();
             
-            const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
             let defaultItem = "";
-            if (arrayTemplates && arrayTemplates[normPath]) {
-              defaultItem = JSON.parse(JSON.stringify(arrayTemplates[normPath]));
+            const templateVal = getCaseInsensitiveValue(arrayTemplates, normPath);
+            if (templateVal !== undefined) {
+              defaultItem = JSON.parse(JSON.stringify(templateVal));
               if (typeof defaultItem === 'object' && defaultItem !== null) {
                 clearValues(defaultItem);
               } else {
@@ -571,9 +594,36 @@ window.FormBuilder = (function() {
       cardTitle.textContent = formatLabel(labelName);
       card.appendChild(cardTitle);
       
-      Object.keys(val).forEach(childKey => {
-        if (childKey.startsWith('_')) return;
-        const childNode = buildFormNode(val[childKey], `${path}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
+      // Get all keys from current value
+      const currentKeys = val ? Object.keys(val) : [];
+      
+      // Get keys from the template (if any)
+      let templateKeys = [];
+      if (templateValForObj && typeof templateValForObj === 'object' && !Array.isArray(templateValForObj)) {
+        templateKeys = Object.keys(templateValForObj);
+      }
+      
+      // Union of keys, preserving order where possible (and filter out internal keys starting with '_')
+      const allKeys = Array.from(new Set([...currentKeys, ...templateKeys])).filter(k => !k.startsWith('_'));
+      
+      allKeys.forEach(childKey => {
+        // Retrieve key case-sensitively or case-insensitively from current val
+        const actualKey = currentKeys.find(k => k.toLowerCase() === childKey.toLowerCase()) || childKey;
+        let childVal = (val && val[actualKey] !== undefined) ? val[actualKey] : undefined;
+        
+        // If childVal is missing, initialize with a default value based on template type
+        if (childVal === undefined && templateValForObj) {
+          const templateChildVal = templateValForObj[childKey];
+          if (Array.isArray(templateChildVal)) {
+            childVal = [];
+          } else if (typeof templateChildVal === 'object' && templateChildVal !== null) {
+            childVal = {};
+          } else {
+            childVal = null;
+          }
+        }
+        
+        const childNode = buildFormNode(childVal, `${path}.${actualKey}`, actualKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
         card.appendChild(childNode);
       });
       

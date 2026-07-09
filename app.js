@@ -1,6 +1,6 @@
 // Main Application Controller
-(function() {
-  
+(function () {
+
   // App State
   let state = {
     fileName: "",
@@ -68,28 +68,28 @@
       progressBarFill: document.getElementById("progress-bar-fill"),
       progressText: document.getElementById("progress-text"),
       documentList: document.getElementById("document-list"),
-      
+
       headerDocTitle: document.getElementById("header-doc-title"),
       headerDocProgress: document.getElementById("header-doc-progress"),
-      
+
       btnReset: document.getElementById("btn-reset"),
       btnFlagDoc: document.getElementById("btn-flag-doc"),
       btnSaveNext: document.getElementById("btn-save-next"),
       btnDownloadJson: document.getElementById("btn-download-json"),
       btnDownloadJsonl: document.getElementById("btn-download-jsonl"),
-      
+
       originalViewer: document.getElementById("original-viewer"),
       originalEquationBox: document.getElementById("original-equation-box"),
       editorForm: document.getElementById("editor-form"),
-      
+
       helpBtn: document.getElementById("help-btn"),
       helpModal: document.getElementById("help-modal"),
       modalCloseBtn: document.getElementById("modal-close-btn"),
       modalOkBtn: document.getElementById("modal-ok-btn"),
-      
+
       toast: document.getElementById("toast"),
       toastMessage: document.getElementById("toast-message"),
-      
+
       aiSettingsBtn: document.getElementById("ai-settings-btn"),
       aiSettingsModal: document.getElementById("ai-settings-modal"),
       settingsOpenaiKey: document.getElementById("settings-openai-key"),
@@ -118,7 +118,7 @@
     // File Upload Drag & Drop
     elements.uploadZone.addEventListener("click", () => elements.fileInput.click());
     elements.fileInput.addEventListener("change", handleFileSelect);
-    
+
     elements.uploadZone.addEventListener("dragover", (e) => {
       e.preventDefault();
       elements.uploadZone.style.borderColor = "var(--primary-accent)";
@@ -165,7 +165,7 @@
     elements.btnReset.addEventListener("click", resetCurrentDocument);
     elements.btnFlagDoc.addEventListener("click", flagCurrentDocumentAsWhole);
     elements.btnSaveNext.addEventListener("click", saveAndGoNext);
-    
+
     // Exports
     elements.btnDownloadJson.addEventListener("click", () => downloadData("json"));
     elements.btnDownloadJsonl.addEventListener("click", () => downloadData("jsonl"));
@@ -227,25 +227,25 @@
       // Check if user is typing in a text input/textarea (to prevent intercepting standard typing)
       const activeTag = document.activeElement.tagName;
       const isTyping = activeTag === "INPUT" || activeTag === "TEXTAREA";
-      
+
       // Ctrl + S: Save & Next
       if (e.ctrlKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         saveAndGoNext();
       }
-      
+
       // Ctrl + Right Arrow: Next Document
       if (e.ctrlKey && e.key === 'ArrowRight') {
         e.preventDefault();
         navigateDocument(1);
       }
-      
+
       // Ctrl + Left Arrow: Previous Document
       if (e.ctrlKey && e.key === 'ArrowLeft') {
         e.preventDefault();
         navigateDocument(-1);
       }
-      
+
       // Ctrl + F: Toggle Flag Document as whole (only if not typing in input)
       if (e.ctrlKey && e.key.toLowerCase() === 'f' && !isTyping) {
         e.preventDefault();
@@ -275,30 +275,30 @@
           state.fileName = activeFile;
           state.docs = JSON.parse(savedDocs);
           state.originals = JSON.parse(savedOriginals);
-          
+
           if (!Array.isArray(state.docs) || !Array.isArray(state.originals)) {
             throw new Error("Saved documents state in localStorage is not a valid array");
           }
-          
+
           // Analyze schema to dynamically identify empty arrays structure
           const schemaInfo = analyzeSchema(state.originals);
           state.schemaArrayTypes = schemaInfo.arrayTypes;
           state.schemaTemplates = schemaInfo.templates;
-          
+
           const savedIndex = localStorage.getItem(`rtd_validator_index_${activeFile}`);
           let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
           if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
             indexToLoad = 0;
           }
           state.currentIndex = indexToLoad;
-          
+
           // Re-enable elements
           elements.btnReset.disabled = false;
           elements.btnFlagDoc.disabled = false;
           elements.btnSaveNext.disabled = false;
           elements.btnDownloadJson.disabled = false;
           elements.btnDownloadJsonl.disabled = false;
-          
+
           document.getElementById("status-filename").textContent = activeFile;
           renderAll();
           showToast("Restored progress for " + activeFile, "success");
@@ -322,20 +322,20 @@
     state.currentIndex = 0;
     state.schemaArrayTypes = {};
     state.schemaTemplates = {};
-    
+
     document.getElementById("status-filename").textContent = "No file loaded";
     elements.headerDocTitle.textContent = "Select or upload a dataset";
     elements.headerDocProgress.textContent = "No active document";
-    
+
     // Disable header buttons
     elements.btnReset.disabled = true;
     elements.btnFlagDoc.disabled = true;
     elements.btnSaveNext.disabled = true;
-    
+
     // Disable sidebar actions
     elements.btnDownloadJson.disabled = true;
     elements.btnDownloadJsonl.disabled = true;
-    
+
     // Render friendly empty state screens
     const emptyHtml = `
       <div class="empty-state-container">
@@ -344,20 +344,20 @@
         <div class="empty-state-desc">Drag & drop a JSON or JSONL file into the upload zone or click browse to start validating.</div>
       </div>
     `;
-    
+
     elements.originalViewer.innerHTML = emptyHtml;
     elements.originalEquationBox.style.display = "none";
     elements.editorForm.innerHTML = emptyHtml;
-    
+
     elements.documentList.innerHTML = `
       <div style="text-align: center; padding: 2rem; color: rgba(255, 255, 255, 0.4); font-size: 0.85rem;">
         Waiting for file upload...
       </div>
     `;
-    
+
     elements.progressBarFill.style.width = "0%";
     elements.progressText.textContent = "0 / 0 validated (0%)";
-    
+
     document.getElementById("status-total").textContent = "0";
     document.getElementById("status-validated").textContent = "0";
     document.getElementById("status-flagged").textContent = "0";
@@ -366,38 +366,47 @@
 
   // Analyze schema across all documents to learn structures of arrays and object templates
   function analyzeSchema(docs) {
-    const arrayTypes = {}; // normalizedPath -> 'object' | 'primitive'
-    const templates = {};  // normalizedPath -> first non-null object template
-    
+    const arrayTypes = {}; // normalizedPath (lowercase) -> 'object' | 'primitive'
+    const templates = {};  // normalizedPath (lowercase) -> first non-null object template
+
     function traverse(val, path) {
       if (val === null || val === undefined) return;
-      
+
+      const lowerPath = path.toLowerCase();
+
       if (Array.isArray(val)) {
-        const normPath = path;
         if (val.length > 0) {
           const first = val[0];
           const isObj = typeof first === 'object' && first !== null && !Array.isArray(first);
-          arrayTypes[normPath] = isObj ? 'object' : 'primitive';
-          
-          if (isObj && !templates[normPath]) {
-            templates[normPath] = JSON.parse(JSON.stringify(first));
+          arrayTypes[lowerPath] = isObj ? 'object' : 'primitive';
+
+          if (isObj && !templates[lowerPath]) {
+            templates[lowerPath] = JSON.parse(JSON.stringify(first));
           }
-          
+
           val.forEach((item, idx) => {
-            traverse(item, `${normPath}.*`);
+            traverse(item, `${path}.*`);
           });
         }
       } else if (typeof val === 'object') {
+        if (path) {
+          if (!templates[lowerPath]) {
+            templates[lowerPath] = JSON.parse(JSON.stringify(val));
+          } else {
+            // Merge keys to get the union of all keys seen across docs
+            Object.assign(templates[lowerPath], JSON.parse(JSON.stringify(val)));
+          }
+        }
         Object.keys(val).forEach(k => {
           traverse(val[k], path ? `${path}.${k}` : k);
         });
       }
     }
-    
+
     docs.forEach(doc => {
       traverse(doc, "");
     });
-    
+
     return { arrayTypes, templates };
   }
 
@@ -406,31 +415,31 @@
     state.fileName = fileName;
     localStorage.setItem("rtd_validator_active_file", fileName);
     document.getElementById("status-filename").textContent = fileName;
-    
+
     // Analyze schema to dynamically identify empty arrays structure
     const schemaInfo = analyzeSchema(documents);
     state.schemaArrayTypes = schemaInfo.arrayTypes;
     state.schemaTemplates = schemaInfo.templates;
-    
+
     // Enable buttons
     elements.btnReset.disabled = false;
     elements.btnFlagDoc.disabled = false;
     elements.btnSaveNext.disabled = false;
     elements.btnDownloadJson.disabled = false;
     elements.btnDownloadJsonl.disabled = false;
-    
+
     // Check if progress already exists in local storage
     const storageKey = `rtd_validator_data_${fileName}`;
     const originalKey = `rtd_validator_original_${fileName}`;
-    
+
     const savedDocs = localStorage.getItem(storageKey);
     const savedOriginals = localStorage.getItem(originalKey);
-    
+
     if (savedDocs && savedOriginals) {
       state.docs = JSON.parse(savedDocs);
       state.originals = JSON.parse(savedOriginals);
       showToast("Restored validation progress from local storage!", "success");
-      
+
       const savedIndex = localStorage.getItem(`rtd_validator_index_${fileName}`);
       let indexToLoad = savedIndex !== null ? parseInt(savedIndex, 10) : 0;
       if (isNaN(indexToLoad) || indexToLoad < 0 || indexToLoad >= state.docs.length) {
@@ -440,7 +449,7 @@
     } else {
       state.originals = JSON.parse(JSON.stringify(documents));
       state.docs = JSON.parse(JSON.stringify(documents));
-      
+
       // Initialize validation structures if missing
       state.docs.forEach(doc => {
         if (!doc._validation) {
@@ -450,11 +459,11 @@
           };
         }
       });
-      
+
       saveToLocalStorage();
       state.currentIndex = 0;
     }
-    
+
     renderAll();
   }
 
@@ -472,10 +481,10 @@
 
   function processUploadedFile(file) {
     const reader = new FileReader();
-    reader.onload = function(event) {
+    reader.onload = function (event) {
       const content = event.target.result.trim();
       const parsedDocs = [];
-      
+
       try {
         if (file.name.endsWith(".jsonl") || content.includes("\n")) {
           // Process JSONL line by line
@@ -495,11 +504,11 @@
             parsedDocs.push(data);
           }
         }
-        
+
         if (parsedDocs.length === 0) {
           throw new Error("No valid JSON records found in the uploaded file");
         }
-        
+
         setDataset(file.name, parsedDocs);
         updateStorageDisplay(true);
       } catch (err) {
@@ -514,13 +523,13 @@
   function selectDocument(index) {
     state.currentIndex = index;
     localStorage.setItem(`rtd_validator_index_${state.fileName}`, index);
-    
+
     // Reset scroll positions of panels to top when switching documents
     const panels = document.querySelectorAll(".panel-body");
     panels.forEach(p => p.scrollTop = 0);
-    
+
     renderActiveDocument();
-    
+
     // Highlight sidebar active item
     const items = elements.documentList.querySelectorAll(".doc-item");
     items.forEach((item, idx) => {
@@ -536,38 +545,38 @@
   function navigateDocument(direction) {
     const visibleDocs = getFilteredDocuments();
     if (visibleDocs.length === 0) return;
-    
+
     const currentDoc = state.docs[state.currentIndex];
     let visibleIndex = visibleDocs.findIndex(d => d.id === currentDoc.id);
-    
+
     if (visibleIndex === -1) visibleIndex = 0;
-    
+
     let nextVisibleIndex = visibleIndex + direction;
     if (nextVisibleIndex < 0) nextVisibleIndex = visibleDocs.length - 1;
     if (nextVisibleIndex >= visibleDocs.length) nextVisibleIndex = 0;
-    
+
     const nextDoc = visibleDocs[nextVisibleIndex];
     const actualIndex = state.docs.findIndex(d => d.id === nextDoc.id);
-    
+
     selectDocument(actualIndex);
   }
 
   // Save current changes and advance
   function saveAndGoNext() {
     if (state.docs.length === 0) return;
-    
+
     const currentDoc = state.docs[state.currentIndex];
-    
+
     // Mark as validated
     currentDoc._validation.status = "validated";
     saveToLocalStorage();
-    
+
     showToast(`Saved and validated document #${state.currentIndex + 1}`, "success");
-    
+
     // Update sidebar counts and list item
     updateProgressTracker();
     renderDocumentList();
-    
+
     // Auto-advance
     if (state.currentIndex < state.docs.length - 1) {
       setTimeout(() => {
@@ -582,10 +591,10 @@
   // Toggle whole-doc flag
   function flagCurrentDocumentAsWhole() {
     if (state.docs.length === 0) return;
-    
+
     const currentDoc = state.docs[state.currentIndex];
     const currentStatus = currentDoc._validation.status;
-    
+
     if (currentStatus === "flagged") {
       currentDoc._validation.status = "pending";
       showToast("Document unflagged", "success");
@@ -593,7 +602,7 @@
       currentDoc._validation.status = "flagged";
       showToast("Document marked as Flagged", "flagged");
     }
-    
+
     saveToLocalStorage();
     updateProgressTracker();
     renderDocumentList();
@@ -603,17 +612,17 @@
   // Reset to original LLM values
   function resetCurrentDocument() {
     if (state.docs.length === 0) return;
-    
+
     if (confirm("Are you sure you want to revert all changes for this document to the original LLM output?")) {
       const original = JSON.parse(JSON.stringify(state.originals[state.currentIndex]));
       state.docs[state.currentIndex] = original;
-      
+
       // Keep structural metadata but reset status
       state.docs[state.currentIndex]._validation = {
         status: "pending",
         flagged_fields: []
       };
-      
+
       saveToLocalStorage();
       updateProgressTracker();
       renderDocumentList();
@@ -631,13 +640,13 @@
       const titleMatch = doc.base_metadata && doc.base_metadata.document_title && doc.base_metadata.document_title.toLowerCase().includes(state.searchQuery);
       const captionMatch = doc.caption && doc.caption.toLowerCase().includes(state.searchQuery);
       const sourceMatch = doc._source_file && doc._source_file.toLowerCase().includes(state.searchQuery);
-      
+
       const searchMatch = idMatch || textMatch || titleMatch || captionMatch || sourceMatch || !state.searchQuery;
-      
+
       // 2. Status Filter Match
       const status = doc._validation ? doc._validation.status : "pending";
       const hasFlaggedFields = doc._validation && Array.isArray(doc._validation.flagged_fields) && doc._validation.flagged_fields.length > 0;
-      
+
       let statusMatch = false;
       if (state.statusFilter === "all") {
         statusMatch = true;
@@ -646,7 +655,7 @@
       } else {
         statusMatch = (status === state.statusFilter);
       }
-      
+
       return searchMatch && statusMatch;
     });
   }
@@ -661,19 +670,19 @@
   function updateProgressTracker() {
     const total = state.docs.length;
     if (total === 0) return;
-    
+
     const validatedCount = state.docs.filter(d => d._validation && d._validation.status === "validated").length;
     const flaggedCount = state.docs.filter(d => d._validation && d._validation.status === "flagged").length;
-    
+
     const percent = Math.round((validatedCount / total) * 100);
     elements.progressBarFill.style.width = `${percent}%`;
     elements.progressText.textContent = `${validatedCount} / ${total} validated (${percent}%)`;
-    
+
     // Update status footer details
     document.getElementById("status-total").textContent = total;
     document.getElementById("status-validated").textContent = validatedCount;
     document.getElementById("status-flagged").textContent = flaggedCount;
-    
+
     // Call throttled storage footprint updates
     updateStorageDisplay(false);
   }
@@ -712,7 +721,7 @@
   function renderDocumentList() {
     elements.documentList.innerHTML = '';
     const filtered = getFilteredDocuments();
-    
+
     if (filtered.length === 0) {
       const emptyDiv = document.createElement("div");
       emptyDiv.style.textAlign = "center";
@@ -723,14 +732,14 @@
       elements.documentList.appendChild(emptyDiv);
       return;
     }
-    
+
     filtered.forEach(doc => {
       // Find actual index in global array
       const globalIdx = state.docs.findIndex(d => d.id === doc.id);
-      
+
       const item = document.createElement("div");
       item.className = `doc-item ${globalIdx === state.currentIndex ? 'active' : ''}`;
-      
+
       // Title logic
       let docTitle = `Doc #${globalIdx + 1}`;
       if (doc.base_metadata && doc.base_metadata.document_title) {
@@ -738,15 +747,15 @@
       } else if (doc.caption) {
         docTitle = doc.caption;
       }
-      
+
       let docId = doc.id || "No ID";
       // Trim if ID is long
       if (docId.length > 30) {
         docId = docId.substring(0, 28) + "...";
       }
-      
+
       const status = doc._validation ? doc._validation.status : "pending";
-      
+
       item.innerHTML = `
         <div class="doc-item-header">
           <span class="doc-item-title" title="${docTitle}">${docTitle}</span>
@@ -754,11 +763,11 @@
         </div>
         <div class="doc-item-subtitle" title="${doc.id}">${docId}</div>
       `;
-      
+
       item.addEventListener("click", () => {
         selectDocument(globalIdx);
       });
-      
+
       elements.documentList.appendChild(item);
     });
 
@@ -790,7 +799,7 @@
 
   function renderActiveDocument() {
     if (state.docs.length === 0) return;
-    
+
     // Reset AI insights card state immediately when rendering a new document to prevent leftover display
     if (elements.aiToggle && elements.aiToggle.checked) {
       elements.aiInsightsCard.style.display = "block";
@@ -803,10 +812,10 @@
     } else if (elements.aiInsightsCard) {
       elements.aiInsightsCard.style.display = "none";
     }
-    
+
     const doc = state.docs[state.currentIndex];
     const original = state.originals[state.currentIndex];
-    
+
     // Header Info
     let docTitle = `Doc #${state.currentIndex + 1}`;
     if (doc.base_metadata && doc.base_metadata.document_title) {
@@ -817,7 +826,7 @@
     elements.headerDocTitle.textContent = docTitle;
     elements.headerDocTitle.title = docTitle;
     elements.headerDocProgress.textContent = `Document ${state.currentIndex + 1} of ${state.docs.length} (${doc.id || 'No ID'})`;
-    
+
     // Flag Document button status
     const status = doc._validation ? doc._validation.status : "pending";
     if (status === "flagged") {
@@ -827,23 +836,23 @@
       elements.btnFlagDoc.classList.remove("active");
       elements.btnFlagDoc.textContent = "🏳️ Flag Document";
     }
-    
+
     // Save button label
     if (state.currentIndex === state.docs.length - 1) {
       elements.btnSaveNext.textContent = "✔ Save & Complete";
     } else {
       elements.btnSaveNext.textContent = "✔ Save & Next";
     }
-    
+
     // RENDER LEFT SIDE: Read-Only Original JSON Viewer
     window.JsonViewer.render(original, elements.originalViewer);
-    
+
     // LaTeX Rendering on the left side (if equation file)
     const hasLatex = original.latex || original.text_form;
     if (hasLatex) {
       elements.originalEquationBox.style.display = "flex";
       const formula = original.latex || original.text_form;
-      
+
       // Find math subcontainer
       let mathContainer = elements.originalEquationBox.querySelector(".math-render-sub");
       if (!mathContainer) {
@@ -851,7 +860,7 @@
         mathContainer.className = "math-render-sub";
         elements.originalEquationBox.appendChild(mathContainer);
       }
-      
+
       if (window.katex) {
         window.katex.render(formula, mathContainer, { displayMode: true, throwOnError: false });
       } else {
@@ -860,7 +869,7 @@
     } else {
       elements.originalEquationBox.style.display = "none";
     }
-    
+
     // RENDER RIGHT SIDE: Editable Dynamic Form Builder
     safeRenderForm(doc, original);
 
@@ -871,24 +880,24 @@
   // AI Validation Trigger
   async function triggerAiValidation() {
     if (state.docs.length === 0) return;
-    
+
     // Clear pending debounce timers
     if (aiValidationTimeout) {
       clearTimeout(aiValidationTimeout);
       aiValidationTimeout = null;
     }
-    
+
     // Abort in-flight requests
     if (aiValidationAbortController) {
       aiValidationAbortController.abort();
       aiValidationAbortController = null;
     }
-    
+
     const doc = state.docs[state.currentIndex];
     const activeIndexAtStart = state.currentIndex;
-    
+
     console.log("[AI Validation] triggerAiValidation invoked. Index:", activeIndexAtStart);
-    
+
     // Check if toggle is enabled
     const aiEnabled = elements.aiToggle.checked;
     if (!aiEnabled) {
@@ -896,16 +905,16 @@
       elements.aiInsightsCard.style.display = "none";
       return;
     }
-    
+
     // Clear previous results/quotes to avoid showing leftover data
     elements.aiInsightCorrections.innerHTML = "";
     elements.aiInsightQuotes.innerHTML = "";
-    
+
     const metaKey = getDomainMetadataKey(doc);
     console.log("[AI Validation] Resolved metadata key:", metaKey);
     console.log("[AI Validation] doc[metaKey] defined:", doc[metaKey] !== undefined);
     console.log("[AI Validation] doc.text defined:", doc.text !== undefined);
-    
+
     // Check if document has domain_metadata and text
     if (doc[metaKey] === undefined || doc.text === undefined) {
       console.warn("[AI Validation] Current document schema does not support AI validation (missing " + metaKey + " or text).");
@@ -916,9 +925,9 @@
       elements.aiInsightsSummary.textContent = "AI validation is only supported for schemas with 'text' and '" + metaKey + "'.";
       return;
     }
-    
+
     elements.aiInsightsCard.style.display = "block";
-    
+
     // Check if already validated and cached
     if (doc._validation && doc._validation.ai_insights) {
       const insights = doc._validation.ai_insights;
@@ -936,11 +945,11 @@
         console.log("[AI Validation] Cached insights are in the old format or lack model information. Re-validating document...");
       }
     }
-    
+
     // Retrieve keys
     const openaiKey = sessionStorage.getItem("rtd_validator_openai_key") || localStorage.getItem("rtd_validator_openai_key") || "";
     const geminiKey = sessionStorage.getItem("rtd_validator_gemini_key") || localStorage.getItem("rtd_validator_gemini_key") || "";
-    
+
     if (!openaiKey && !geminiKey) {
       console.warn("[AI Validation] No API Keys configured.");
       elements.aiInsightsCard.classList.remove("loading", "expanded");
@@ -949,20 +958,20 @@
       elements.aiInsightsSummary.textContent = "API Keys missing. Click 'API Keys' in the sidebar to configure.";
       return;
     }
-    
+
     // Set loading state immediately for user feedback
     elements.aiInsightsCard.classList.add("loading");
     elements.aiInsightsBadge.className = "ai-insights-badge loading";
     elements.aiInsightsBadge.textContent = "⚡ Validating...";
     elements.aiInsightsSummary.textContent = "AI is reviewing the domain metadata against the source text...";
-    
+
     // Debounce the validation trigger by 300ms
     aiValidationTimeout = setTimeout(async () => {
       aiValidationTimeout = null;
-      
+
       aiValidationAbortController = new AbortController();
       const signal = aiValidationAbortController.signal;
-      
+
       try {
         // Call validator with only the text field and domain_metadata from the original document
         const originalDoc = state.originals[state.currentIndex];
@@ -974,22 +983,22 @@
           geminiKey,
           signal
         );
-        
+
         if (signal.aborted) {
           console.log("[AI Validation] Request aborted. Suppressing merge.");
           return;
         }
-        
+
         console.log("[AI Validation] API response received:", result);
-        
+
         const currentDocAfterCall = state.docs[state.currentIndex];
-        
+
         // Extract corrected metadata robustly. LLM might put keys at root or nested under corrected_metadata
         let corrected = result.corrected_metadata || result.correctedMetadata || result.rawResponse;
         if (!corrected) {
           corrected = result;
         }
-        
+
         // If it is a string representation, parse it
         if (typeof corrected === 'string') {
           try {
@@ -998,7 +1007,7 @@
             console.warn("[AI Validation] Failed parsing corrected metadata string:", e);
           }
         }
-        
+
         if (corrected && typeof corrected === 'object') {
           corrected = JSON.parse(JSON.stringify(corrected));
           // Remove meta-parameters if LLM placed them at the root
@@ -1010,18 +1019,18 @@
             'modelUsed', 'rawResponse'
           ];
           metaKeys.forEach(k => delete corrected[k]);
-          
+
           // Deep clone current metadata and merge the corrected keys defensively
           const currentMeta = doc[metaKey] ? JSON.parse(JSON.stringify(doc[metaKey])) : {};
           Object.keys(corrected).forEach(k => {
             // Case-insensitive key lookup in original and current metadata
             const origKey = getCaseInsensitiveKey(originalDoc[origMetaKey], k);
             const currentKey = getCaseInsensitiveKey(doc[metaKey], k);
-            
+
             const originalVal = origKey !== undefined ? JSON.stringify(originalDoc[origMetaKey][origKey]) : undefined;
             const currentVal = currentKey !== undefined ? JSON.stringify(doc[metaKey][currentKey]) : undefined;
             const userEdited = originalVal !== currentVal;
-            
+
             if (!userEdited) {
               const targetKey = currentKey || origKey || k;
               // Clean up other casings of the same key in currentMeta to avoid duplicate key properties
@@ -1035,13 +1044,13 @@
               console.log(`[AI Validation] Skipping merge for field '${k}' because it was user-edited.`);
             }
           });
-          
+
           doc[metaKey] = currentMeta;
           console.log("[AI Validation] Defensive merge completed. Updated domain_metadata:", doc[metaKey]);
         } else {
           console.warn("[AI Validation] Could not extract corrected metadata object from API response.");
         }
-        
+
         if (!doc._validation) {
           doc._validation = { status: "pending", flagged_fields: [] };
         }
@@ -1050,16 +1059,16 @@
           corrections_description: result.corrections_description || [],
           evidence_summary: result.evidence_summary || []
         };
-        
+
         saveToLocalStorage();
         updateProgressTracker();
-        
+
         if (state.currentIndex === activeIndexAtStart && currentDocAfterCall === doc) {
           // Refresh form to show the corrected values first
           safeRenderForm(doc, state.originals[state.currentIndex]);
-          
+
           displayAiInsights(doc._validation.ai_insights);
-          
+
           showToast(`AI Validation completed using ${result.modelUsed}!`, "success");
         } else {
           console.log("[AI Validation] API returned, but active document changed. Saved state, skipped rendering.");
@@ -1085,10 +1094,10 @@
     console.log("[AI Validation] Rendering AI insights card display values.");
     elements.aiInsightsCard.style.display = "block"; // Explicitly ensure visibility
     elements.aiInsightsCard.classList.remove("loading");
-    
+
     // Scroll the panel back to top so the card is visible
     elements.aiInsightsCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    
+
     if (!insights) {
       elements.aiInsightsBadge.className = "ai-insights-badge fallback";
       elements.aiInsightsBadge.textContent = "🤖 AI Warning";
@@ -1096,19 +1105,19 @@
       elements.aiInsightsCard.classList.remove("expanded");
       return;
     }
-    
+
     const originalDoc = state.originals[state.currentIndex];
     const doc = state.docs[state.currentIndex];
     const origMetaKey = getDomainMetadataKey(originalDoc);
     const metaKey = getDomainMetadataKey(doc);
-    
+
     // Recursive diff helper to find actual modifications
     function getDiffs(orig, current, path = "") {
       const diffs = [];
-      const isEmpty = (v) => v === undefined || v === null || v === '' || 
-                             (Array.isArray(v) && v.length === 0) ||
-                             (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
-                             
+      const isEmpty = (v) => v === undefined || v === null || v === '' ||
+        (Array.isArray(v) && v.length === 0) ||
+        (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+
       if (isEmpty(orig) && isEmpty(current)) {
         return diffs;
       }
@@ -1122,7 +1131,7 @@
         diffs.push({ field: path, oldVal: orig, newVal: current });
         return diffs;
       }
-      
+
       if (Array.isArray(orig) && Array.isArray(current)) {
         if (JSON.stringify(orig) !== JSON.stringify(current)) {
           diffs.push({ field: path, oldVal: orig, newVal: current });
@@ -1143,7 +1152,7 @@
             keysMap.set(lower, { currentKey: k });
           }
         });
-        
+
         keysMap.forEach((keysInfo, lowerKey) => {
           const origKey = keysInfo.origKey || keysInfo.currentKey;
           const currentKey = keysInfo.currentKey || keysInfo.origKey;
@@ -1157,9 +1166,9 @@
       }
       return diffs;
     }
-    
+
     const actualDiffs = getDiffs(originalDoc[origMetaKey], doc[metaKey]);
-    
+
     // Normalize path for matching (converts casing and strips domain_metadata prefix)
     function normalizePath(p) {
       if (!p) return "";
@@ -1167,14 +1176,14 @@
         .replace(/^(domain_metadata|domainmetadata)\./, "")
         .trim();
     }
-    
+
     const corrections = [];
     const llmCorrections = insights.corrections_description || [];
-    
+
     actualDiffs.forEach(diff => {
       const normalizedDiffField = normalizePath(diff.field);
       const match = Array.isArray(llmCorrections) ? llmCorrections.find(c => normalizePath(c.field) === normalizedDiffField) : null;
-      
+
       if (match) {
         corrections.push({
           field: diff.field,
@@ -1183,9 +1192,9 @@
         });
       } else {
         // Fallback explanation if LLM didn't return it in corrections_description
-        const isEmptyVal = (v) => v === undefined || v === null || v === '' || 
-                                 (Array.isArray(v) && v.length === 0) ||
-                                 (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+        const isEmptyVal = (v) => v === undefined || v === null || v === '' ||
+          (Array.isArray(v) && v.length === 0) ||
+          (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
         let issue = "";
         if (isEmptyVal(diff.oldVal)) {
           issue = "Original value was empty; AI extracted new value from text.";
@@ -1194,7 +1203,7 @@
         } else {
           issue = `AI updated value from "${diff.oldVal}" to "${diff.newVal}".`;
         }
-        
+
         let corrStr = "";
         if (diff.newVal === null || diff.newVal === undefined) {
           corrStr = "null";
@@ -1203,7 +1212,7 @@
         } else {
           corrStr = String(diff.newVal);
         }
-        
+
         corrections.push({
           field: diff.field,
           issue: issue,
@@ -1211,14 +1220,14 @@
         });
       }
     });
-    
+
     const modelUsed = insights.modelUsed || "AI Assistant";
     elements.aiInsightsBadge.className = "ai-insights-badge";
     if (modelUsed.includes("Fallback") || modelUsed === "Gemini") {
       elements.aiInsightsBadge.classList.add("fallback");
     }
     elements.aiInsightsBadge.textContent = `🤖 ${modelUsed}`;
-    
+
     // Summarize corrections count
     let summaryText = "";
     if (corrections.length > 0) {
@@ -1227,7 +1236,7 @@
       summaryText = "Metadata is verified! No corrections needed. (Click to view details)";
     }
     elements.aiInsightsSummary.textContent = summaryText;
-    
+
     // Auto-expand card if corrections actually exist
     if (corrections.length > 0) {
       console.log("[AI Validation] Auto-expanding accordion card since corrections were detected.");
@@ -1235,11 +1244,11 @@
     } else {
       elements.aiInsightsCard.classList.remove("expanded");
     }
-    
+
     // Render corrections table
     const corrContainer = elements.aiInsightCorrections;
     corrContainer.innerHTML = "";
-    
+
     if (corrections.length > 0) {
       const table = document.createElement("table");
       table.className = "ai-insights-table";
@@ -1265,12 +1274,12 @@
     } else {
       corrContainer.innerHTML = '<span class="ai-no-changes">No incorrect extractions detected. Everything is correct!</span>';
     }
-    
+
     // Render evidence table
     const quotesContainer = elements.aiInsightQuotes;
     quotesContainer.innerHTML = "";
     const evidence = insights.evidence_summary || [];
-    
+
     if (Array.isArray(evidence) && evidence.length > 0) {
       const table = document.createElement("table");
       table.className = "ai-insights-table";
@@ -1301,11 +1310,11 @@
   // Download / Export Functions
   function downloadData(format) {
     if (state.docs.length === 0) return;
-    
+
     let content = "";
     let fileExtension = "";
     let mimeType = "";
-    
+
     if (format === "jsonl") {
       // Export line-by-line JSON
       const lines = state.docs.map(doc => JSON.stringify(doc));
@@ -1318,10 +1327,10 @@
       fileExtension = ".json";
       mimeType = "application/json";
     }
-    
+
     const blob = new Blob([content], { type: mimeType });
     const url = URL.createObjectURL(blob);
-    
+
     const a = document.createElement("a");
     a.href = url;
     // Strip original extension if exists
@@ -1331,7 +1340,7 @@
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
+
     showToast(`Downloaded verified dataset in ${format.toUpperCase()} format!`, "success");
   }
 
@@ -1339,16 +1348,16 @@
   let toastTimer = null;
   function showToast(message, type = "success") {
     clearTimeout(toastTimer);
-    
+
     elements.toastMessage.textContent = message;
     elements.toast.className = "toast show";
-    
+
     if (type === "success") {
       elements.toast.classList.add("success");
     } else if (type === "flagged") {
       elements.toast.classList.add("flagged");
     }
-    
+
     toastTimer = setTimeout(() => {
       elements.toast.classList.remove("show");
     }, 3000);
