@@ -366,37 +366,28 @@
 
   // Analyze schema across all documents to learn structures of arrays and object templates
   function analyzeSchema(docs) {
-    const arrayTypes = {}; // normalizedPath (lowercase) -> 'object' | 'primitive'
-    const templates = {};  // normalizedPath (lowercase) -> first non-null object template
+    const arrayTypes = {}; // normalizedPath -> 'object' | 'primitive'
+    const templates = {};  // normalizedPath -> first non-null object template
 
     function traverse(val, path) {
       if (val === null || val === undefined) return;
 
-      const lowerPath = path.toLowerCase();
-
       if (Array.isArray(val)) {
+        const normPath = path;
         if (val.length > 0) {
           const first = val[0];
           const isObj = typeof first === 'object' && first !== null && !Array.isArray(first);
-          arrayTypes[lowerPath] = isObj ? 'object' : 'primitive';
+          arrayTypes[normPath] = isObj ? 'object' : 'primitive';
 
-          if (isObj && !templates[lowerPath]) {
-            templates[lowerPath] = JSON.parse(JSON.stringify(first));
+          if (isObj && !templates[normPath]) {
+            templates[normPath] = JSON.parse(JSON.stringify(first));
           }
 
           val.forEach((item, idx) => {
-            traverse(item, `${path}.*`);
+            traverse(item, `${normPath}.*`);
           });
         }
       } else if (typeof val === 'object') {
-        if (path) {
-          if (!templates[lowerPath]) {
-            templates[lowerPath] = JSON.parse(JSON.stringify(val));
-          } else {
-            // Merge keys to get the union of all keys seen across docs
-            Object.assign(templates[lowerPath], JSON.parse(JSON.stringify(val)));
-          }
-        }
         Object.keys(val).forEach(k => {
           traverse(val[k], path ? `${path}.${k}` : k);
         });

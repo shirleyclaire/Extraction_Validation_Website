@@ -1,5 +1,5 @@
 // Dynamic form builder for validation editing
-window.FormBuilder = (function() {
+window.FormBuilder = (function () {
 
   // Path helpers
   function getValueByPath(obj, path) {
@@ -16,13 +16,6 @@ window.FormBuilder = (function() {
     return current;
   }
 
-  function getCaseInsensitiveValue(obj, path) {
-    if (!obj || !path) return undefined;
-    const lowerPath = path.toLowerCase();
-    const foundKey = Object.keys(obj).find(k => k.toLowerCase() === lowerPath);
-    return foundKey !== undefined ? obj[foundKey] : undefined;
-  }
-
   function setValueByPath(obj, path, value) {
     const parts = path.split('.');
     let current = obj;
@@ -30,7 +23,7 @@ window.FormBuilder = (function() {
       const part = parts[i];
       let foundKey = Object.keys(current).find(k => k.toLowerCase() === part.toLowerCase());
       if (foundKey === undefined) {
-        const nextPartIsIndex = !isNaN(parts[i+1]);
+        const nextPartIsIndex = !isNaN(parts[i + 1]);
         current[part] = nextPartIsIndex ? [] : {};
         foundKey = part;
       }
@@ -98,28 +91,28 @@ window.FormBuilder = (function() {
   // Compare values at a path between originalDoc and current copy to see if modified
   function isFieldModified(originalDoc, path, currentVal) {
     if (!originalDoc) return false;
-    
+
     // Ignore comparison for _validation metadata or internal keys
     if (path.includes('_validation') || path.startsWith('_')) return false;
 
     const origVal = getValueByPath(originalDoc, path);
-    
+
     // Treat null, undefined, empty string, empty array, and empty object as equivalent empty values
-    const isEmpty = (v) => v === undefined || v === null || v === '' || 
-                           (Array.isArray(v) && v.length === 0) ||
-                           (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
-    
+    const isEmpty = (v) => v === undefined || v === null || v === '' ||
+      (Array.isArray(v) && v.length === 0) ||
+      (typeof v === 'object' && v !== null && Object.keys(v).length === 0);
+
     if (isEmpty(origVal) && isEmpty(currentVal)) return false;
 
     if (origVal === undefined) return true;
 
     // Compare origVal and currentVal
     if (typeof origVal !== typeof currentVal) return true;
-    
+
     if (typeof origVal === 'object' && origVal !== null && currentVal !== null) {
       return JSON.stringify(origVal) !== JSON.stringify(currentVal);
     }
-    
+
     return origVal !== currentVal;
   }
 
@@ -131,7 +124,7 @@ window.FormBuilder = (function() {
     if (!Array.isArray(doc._validation.flagged_fields)) {
       doc._validation.flagged_fields = [];
     }
-    
+
     const idx = doc._validation.flagged_fields.indexOf(path);
     if (idx > -1) {
       doc._validation.flagged_fields.splice(idx, 1);
@@ -167,7 +160,7 @@ window.FormBuilder = (function() {
       previewDiv.innerHTML = '<span style="color:#94a3b8; font-style:italic;">No equation entered</span>';
       return;
     }
-    
+
     if (window.katex) {
       try {
         window.katex.render(latexStr, previewDiv, {
@@ -187,23 +180,23 @@ window.FormBuilder = (function() {
     const scrollTop = panelBody ? panelBody.scrollTop : 0;
 
     container.innerHTML = '';
-    
+
     // Create local clone of data to work with
     const docCopy = JSON.parse(JSON.stringify(doc));
-    
+
     // We'll build form nodes recursively
     const formRoot = document.createElement('div');
     formRoot.className = 'form-root-container';
-    
+
     const keys = Object.keys(docCopy);
     keys.forEach(key => {
       // Skip internal keys starting with underscores, EXCEPT when we render or save
       if (key.startsWith('_') && key !== '_flagged_notes') return;
-      
+
       const fieldNode = buildFormNode(docCopy[key], key, key, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
       formRoot.appendChild(fieldNode);
     });
-    
+
     container.appendChild(formRoot);
 
     if (panelBody) {
@@ -214,7 +207,7 @@ window.FormBuilder = (function() {
   function buildFormNode(val, path, labelName, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc) {
     const group = document.createElement('div');
     group.className = 'form-group';
-    
+
     // Set flagged status class initially
     const flagged = isFieldFlagged(docCopy, path);
     if (flagged) {
@@ -226,23 +219,23 @@ window.FormBuilder = (function() {
     if (modified) {
       group.classList.add('modified');
     }
-    
+
     // Label Row
     const labelRow = document.createElement('div');
     labelRow.className = 'form-label-row';
-    
+
     const label = document.createElement('label');
     label.className = 'form-label';
     label.innerHTML = `${formatLabel(labelName)} <span class="form-field-path">${path}</span>`;
     labelRow.appendChild(label);
-    
+
     // Flag Button
     const flagBtn = document.createElement('button');
     flagBtn.className = 'field-flag-toggle';
     if (flagged) flagBtn.classList.add('active');
     flagBtn.title = "Flag this field for review";
     flagBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>`;
-    
+
     flagBtn.addEventListener('click', (e) => {
       e.preventDefault();
       const nowFlagged = toggleFieldFlag(docCopy, path);
@@ -255,50 +248,34 @@ window.FormBuilder = (function() {
       }
       onChange(docCopy);
     });
-    
+
     if (!isImmutableField(path)) {
       labelRow.appendChild(flagBtn);
     }
     group.appendChild(labelRow);
-    
+
     // Value Editor container
     const controlWrapper = document.createElement('div');
     controlWrapper.className = 'form-control-wrapper';
-    
-    const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
-    
-    // Check if the current value is an array or if the schema analyzer learned that it is an array
-    const isArray = Array.isArray(val) || 
-                    (arrayTypes && getCaseInsensitiveValue(arrayTypes, normPath) !== undefined);
-                    
-    // If it's an array but the current value is not an array, initialize it to empty list for rendering
-    if (isArray && !Array.isArray(val)) {
-      val = [];
-    }
 
-    const templateValForObj = getCaseInsensitiveValue(arrayTemplates, normPath);
-    const isObject = (!isArray && typeof val === 'object' && val !== null) ||
-                     (!isArray && templateValForObj && typeof templateValForObj === 'object' && templateValForObj !== null && !Array.isArray(templateValForObj));
-                     
-    if (isObject && (typeof val !== 'object' || val === null)) {
-      val = {};
-    }
-    
+    const isArray = Array.isArray(val);
+    const isObject = typeof val === 'object' && val !== null;
+
     if (isArray) {
       // 1. Is it a spreadsheet table? (2D Array with sibling headers)
       const is2DArray = val.length > 0 && Array.isArray(val[0]);
       const hasHeadersSibling = docCopy.headers !== undefined;
-      
+
       if (is2DArray && labelName === 'rows' && hasHeadersSibling) {
         // Render Spreadsheet grid
         const tableCard = document.createElement('div');
         tableCard.className = 'spreadsheet-container';
-        
+
         const table = document.createElement('table');
         table.className = 'spreadsheet-table';
-        
+
         const headers = docCopy.headers || [];
-        
+
         // Thead
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
@@ -312,10 +289,10 @@ window.FormBuilder = (function() {
         thActions.style.width = '50px';
         thActions.textContent = '';
         headerRow.appendChild(thActions);
-        
+
         thead.appendChild(headerRow);
         table.appendChild(thead);
-        
+
         // Tbody
         const tbody = document.createElement('tbody');
         val.forEach((rowArr, rowIndex) => {
@@ -324,17 +301,17 @@ window.FormBuilder = (function() {
           headers.forEach((h, colIndex) => {
             const td = document.createElement('td');
             const cellVal = rowArr[colIndex] !== undefined ? rowArr[colIndex] : '';
-            
+
             const cellInput = document.createElement('input');
             cellInput.type = 'text';
             cellInput.className = 'spreadsheet-input';
             cellInput.value = cellVal;
-            
+
             cellInput.addEventListener('input', (e) => {
               const cellPath = `${path}.${rowIndex}.${colIndex}`;
               setValueByPath(docCopy, cellPath, e.target.value);
               onChange(docCopy);
-              
+
               const currentTableVal = getValueByPath(docCopy, path);
               const isMod = isFieldModified(originalDoc, path, currentTableVal);
               if (isMod) {
@@ -343,11 +320,11 @@ window.FormBuilder = (function() {
                 group.classList.remove('modified');
               }
             });
-            
+
             td.appendChild(cellInput);
             tr.appendChild(td);
           });
-          
+
           // Delete row cell
           const tdDelete = document.createElement('td');
           tdDelete.className = 'spreadsheet-row-actions';
@@ -370,10 +347,10 @@ window.FormBuilder = (function() {
           tr.appendChild(tdDelete);
           tbody.appendChild(tr);
         });
-        
+
         table.appendChild(tbody);
         tableCard.appendChild(table);
-        
+
         // Add Row Button
         const addRowBtn = document.createElement('button');
         addRowBtn.className = 'spreadsheet-add-btn';
@@ -387,33 +364,33 @@ window.FormBuilder = (function() {
           render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
         });
         tableCard.appendChild(addRowBtn);
-        
+
         controlWrapper.appendChild(tableCard);
-        
+
       } else {
         // 2. Is it a list of objects?
-        const isObjectList = (arrayTypes && getCaseInsensitiveValue(arrayTypes, normPath) === 'object') ||
-                             (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0])) ||
-                             normPath.toLowerCase().endsWith('rtd_functions_discussed');
-        
+        const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
+        const isObjectList = (arrayTypes && arrayTypes[normPath] === 'object') ||
+          (val.length > 0 && typeof val[0] === 'object' && val[0] !== null && !Array.isArray(val[0]));
+
         if (isObjectList) {
           const listWrapper = document.createElement('div');
           listWrapper.className = 'array-objects-container';
           listWrapper.style.width = '100%';
-          
+
           val.forEach((item, itemIdx) => {
             const itemCard = document.createElement('div');
             itemCard.className = 'array-object-item';
-            
+
             // Item Header with index and delete
             const itemHeader = document.createElement('div');
             itemHeader.className = 'array-object-header';
-            
+
             const indexLabel = document.createElement('span');
             indexLabel.className = 'array-object-index';
             indexLabel.textContent = `Item #${itemIdx + 1}`;
             itemHeader.appendChild(indexLabel);
-            
+
             const delItemBtn = document.createElement('button');
             delItemBtn.className = 'delete-array-item-btn';
             delItemBtn.title = "Delete this list item";
@@ -427,11 +404,11 @@ window.FormBuilder = (function() {
             });
             itemHeader.appendChild(delItemBtn);
             itemCard.appendChild(itemHeader);
-            
+
             // Item body (nested object fields)
             const itemBody = document.createElement('div');
             itemBody.className = 'array-object-body';
-            
+
             if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
               Object.keys(item).forEach(childKey => {
                 if (childKey.startsWith('_')) return;
@@ -442,19 +419,19 @@ window.FormBuilder = (function() {
               // It's a primitive (string, number, null, boolean) inside the card list!
               const inputWrapper = document.createElement('div');
               inputWrapper.className = 'form-control-wrapper';
-              
+
               const input = document.createElement('input');
               input.type = 'text';
               input.className = 'form-control';
               input.value = item === null ? "" : String(item);
               input.placeholder = item === null ? "null (empty)" : "";
-              
+
               input.addEventListener('input', (e) => {
                 const v = e.target.value === '' ? null : e.target.value;
                 val[itemIdx] = v;
                 setValueByPath(docCopy, path, val);
                 onChange(docCopy);
-                
+
                 const isMod = isFieldModified(originalDoc, path, val);
                 if (isMod) {
                   group.classList.add('modified');
@@ -462,26 +439,26 @@ window.FormBuilder = (function() {
                   group.classList.remove('modified');
                 }
               });
-              
+
               inputWrapper.appendChild(input);
               itemBody.appendChild(inputWrapper);
             }
-            
+
             itemCard.appendChild(itemBody);
             listWrapper.appendChild(itemCard);
           });
-          
+
           // Add Item Button
           const addItemBtn = document.createElement('button');
           addItemBtn.className = 'add-array-item-btn';
           addItemBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> Add list item`;
           addItemBtn.addEventListener('click', (e) => {
             e.preventDefault();
-            
+
+            const normPath = path.replace(/\.\d+\./g, '.*.').replace(/\.\d+$/g, '.*');
             let defaultItem = "";
-            const templateVal = getCaseInsensitiveValue(arrayTemplates, normPath);
-            if (templateVal !== undefined) {
-              defaultItem = JSON.parse(JSON.stringify(templateVal));
+            if (arrayTemplates && arrayTemplates[normPath]) {
+              defaultItem = JSON.parse(JSON.stringify(arrayTemplates[normPath]));
               if (typeof defaultItem === 'object' && defaultItem !== null) {
                 clearValues(defaultItem);
               } else {
@@ -498,13 +475,13 @@ window.FormBuilder = (function() {
             } else {
               defaultItem = "";
             }
-            
+
             val.push(defaultItem);
             setValueByPath(docCopy, path, val);
             onChange(docCopy);
             render(docCopy, container, onChange, arrayTypes, arrayTemplates, originalDoc);
           });
-          
+
           listWrapper.appendChild(addItemBtn);
           controlWrapper.appendChild(listWrapper);
         } else {
@@ -512,20 +489,20 @@ window.FormBuilder = (function() {
           const tagContainer = document.createElement('div');
           tagContainer.className = 'tag-container';
           tagContainer.style.width = '100%';
-          
+
           const tagsListSpan = document.createElement('span');
           tagsListSpan.style.display = 'flex';
           tagsListSpan.style.flexWrap = 'wrap';
           tagsListSpan.style.gap = '0.35rem';
           tagContainer.appendChild(tagsListSpan);
-          
+
           const renderTags = () => {
             tagsListSpan.innerHTML = '';
             val.forEach((tagVal, tagIdx) => {
               const tag = document.createElement('span');
               tag.className = 'tag-badge';
               tag.textContent = tagVal;
-              
+
               const tagDel = document.createElement('button');
               tagDel.className = 'tag-close';
               tagDel.textContent = '×';
@@ -535,7 +512,7 @@ window.FormBuilder = (function() {
                 setValueByPath(docCopy, path, val);
                 onChange(docCopy);
                 renderTags();
-                
+
                 const isMod = isFieldModified(originalDoc, path, val);
                 if (isMod) {
                   group.classList.add('modified');
@@ -547,14 +524,14 @@ window.FormBuilder = (function() {
               tagsListSpan.appendChild(tag);
             });
           };
-          
+
           renderTags();
-          
+
           const tagInput = document.createElement('input');
           tagInput.type = 'text';
           tagInput.className = 'tag-input';
           tagInput.placeholder = 'Type and press Enter...';
-          
+
           tagInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
               e.preventDefault();
@@ -568,7 +545,7 @@ window.FormBuilder = (function() {
                 onChange(docCopy);
                 e.target.value = '';
                 renderTags();
-                
+
                 const isMod = isFieldModified(originalDoc, path, val);
                 if (isMod) {
                   group.classList.add('modified');
@@ -578,7 +555,7 @@ window.FormBuilder = (function() {
               }
             }
           });
-          
+
           tagContainer.appendChild(tagInput);
           controlWrapper.appendChild(tagContainer);
         }
@@ -588,74 +565,47 @@ window.FormBuilder = (function() {
       const card = document.createElement('div');
       card.className = 'nested-object-card';
       card.style.width = '100%';
-      
+
       const cardTitle = document.createElement('div');
       cardTitle.className = 'nested-object-title';
       cardTitle.textContent = formatLabel(labelName);
       card.appendChild(cardTitle);
-      
-      // Get all keys from current value
-      const currentKeys = val ? Object.keys(val) : [];
-      
-      // Get keys from the template (if any)
-      let templateKeys = [];
-      if (templateValForObj && typeof templateValForObj === 'object' && !Array.isArray(templateValForObj)) {
-        templateKeys = Object.keys(templateValForObj);
-      }
-      
-      // Union of keys, preserving order where possible (and filter out internal keys starting with '_')
-      const allKeys = Array.from(new Set([...currentKeys, ...templateKeys])).filter(k => !k.startsWith('_'));
-      
-      allKeys.forEach(childKey => {
-        // Retrieve key case-sensitively or case-insensitively from current val
-        const actualKey = currentKeys.find(k => k.toLowerCase() === childKey.toLowerCase()) || childKey;
-        let childVal = (val && val[actualKey] !== undefined) ? val[actualKey] : undefined;
-        
-        // If childVal is missing, initialize with a default value based on template type
-        if (childVal === undefined && templateValForObj) {
-          const templateChildVal = templateValForObj[childKey];
-          if (Array.isArray(templateChildVal)) {
-            childVal = [];
-          } else if (typeof templateChildVal === 'object' && templateChildVal !== null) {
-            childVal = {};
-          } else {
-            childVal = null;
-          }
-        }
-        
-        const childNode = buildFormNode(childVal, `${path}.${actualKey}`, actualKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
+
+      Object.keys(val).forEach(childKey => {
+        if (childKey.startsWith('_')) return;
+        const childNode = buildFormNode(val[childKey], `${path}.${childKey}`, childKey, docCopy, onChange, container, arrayTypes, arrayTemplates, originalDoc);
         card.appendChild(childNode);
       });
-      
+
       controlWrapper.appendChild(card);
-      
+
     } else {
       // Primitive Fields (String, Number, Boolean, Null)
       if (typeof val === 'boolean') {
         const toggleLabel = document.createElement('label');
         toggleLabel.className = 'toggle-switch';
-        
+
         const toggleInput = document.createElement('input');
         toggleInput.type = 'checkbox';
         toggleInput.checked = val;
         const slider = document.createElement('span');
         slider.className = 'toggle-slider';
-        
+
         toggleLabel.appendChild(toggleInput);
         toggleLabel.appendChild(slider);
-        
+
         const stateText = document.createElement('span');
         stateText.style.fontSize = '0.875rem';
         stateText.style.marginLeft = '0.5rem';
         stateText.style.fontWeight = '500';
         stateText.textContent = val ? 'Yes' : 'No';
-        
+
         toggleInput.addEventListener('change', (e) => {
           const checked = e.target.checked;
           setValueByPath(docCopy, path, checked);
           stateText.textContent = checked ? 'Yes' : 'No';
           onChange(docCopy);
-          
+
           const isMod = isFieldModified(originalDoc, path, checked);
           if (isMod) {
             group.classList.add('modified');
@@ -663,17 +613,17 @@ window.FormBuilder = (function() {
             group.classList.remove('modified');
           }
         });
-        
+
         controlWrapper.appendChild(toggleLabel);
         controlWrapper.appendChild(stateText);
-        
+
       } else if (typeof val === 'number') {
         const input = document.createElement('input');
         input.type = 'number';
         input.step = 'any';
         input.className = 'form-control';
         input.value = val;
-        
+
         if (isImmutableField(path)) {
           input.readOnly = true;
         } else {
@@ -681,7 +631,7 @@ window.FormBuilder = (function() {
             const numVal = e.target.value === '' ? null : Number(e.target.value);
             setValueByPath(docCopy, path, numVal);
             onChange(docCopy);
-            
+
             const isMod = isFieldModified(originalDoc, path, numVal);
             if (isMod) {
               group.classList.add('modified');
@@ -690,25 +640,25 @@ window.FormBuilder = (function() {
             }
           });
         }
-        
+
         controlWrapper.appendChild(input);
-        
+
       } else {
         // String or Null
         const strVal = val === null ? "" : String(val);
-        const isLong = strVal.length > 80 || strVal.includes('\n') || 
-                       labelName.toLowerCase().includes('text') || 
-                       labelName.toLowerCase().includes('description') || 
-                       labelName.toLowerCase().includes('caption') ||
-                       labelName.toLowerCase().includes('latex') ||
-                       labelName.toLowerCase().includes('finding');
-                       
+        const isLong = strVal.length > 80 || strVal.includes('\n') ||
+          labelName.toLowerCase().includes('text') ||
+          labelName.toLowerCase().includes('description') ||
+          labelName.toLowerCase().includes('caption') ||
+          labelName.toLowerCase().includes('latex') ||
+          labelName.toLowerCase().includes('finding');
+
         if (isLong) {
           const textarea = document.createElement('textarea');
           textarea.className = 'form-control';
           textarea.value = strVal;
           textarea.placeholder = val === null ? "null (empty)" : "";
-          
+
           if (isImmutableField(path)) {
             textarea.readOnly = true;
           } else {
@@ -716,57 +666,57 @@ window.FormBuilder = (function() {
               const v = e.target.value === '' ? null : e.target.value;
               setValueByPath(docCopy, path, v);
               onChange(docCopy);
-              
+
               const isMod = isFieldModified(originalDoc, path, v);
               if (isMod) {
                 group.classList.add('modified');
               } else {
                 group.classList.remove('modified');
               }
-              
+
               // Trigger LaTeX preview if this is an equation field
               if (labelName === 'latex' || labelName === 'text_form') {
                 renderLatexPreview(e.target.value, previewContainer);
               }
             });
           }
-          
+
           controlWrapper.appendChild(textarea);
-          
+
           // Add LaTeX live preview box right under LaTeX input box
           let previewContainer;
           if (labelName === 'latex' || labelName === 'text_form') {
             controlWrapper.style.flexDirection = 'column';
             controlWrapper.style.alignItems = 'stretch';
-            
+
             previewContainer = document.createElement('div');
             previewContainer.className = 'equation-display-card';
             previewContainer.style.marginTop = '0.5rem';
-            
+
             const cardLabel = document.createElement('span');
             cardLabel.className = 'equation-card-label';
             cardLabel.textContent = `Live Equation Preview (${labelName})`;
             previewContainer.appendChild(cardLabel);
-            
+
             const mathSpan = document.createElement('div');
             mathSpan.style.width = '100%';
             previewContainer.appendChild(mathSpan);
-            
+
             controlWrapper.appendChild(previewContainer);
-            
+
             // Run initial preview render
             setTimeout(() => {
               renderLatexPreview(strVal, mathSpan);
             }, 0);
           }
-          
+
         } else {
           const input = document.createElement('input');
           input.type = 'text';
           input.className = 'form-control';
           input.value = strVal;
           input.placeholder = val === null ? "null (empty)" : "";
-          
+
           if (isImmutableField(path)) {
             input.readOnly = true;
           } else {
@@ -774,44 +724,44 @@ window.FormBuilder = (function() {
               const v = e.target.value === '' ? null : e.target.value;
               setValueByPath(docCopy, path, v);
               onChange(docCopy);
-              
+
               const isMod = isFieldModified(originalDoc, path, v);
               if (isMod) {
                 group.classList.add('modified');
               } else {
                 group.classList.remove('modified');
               }
-              
+
               // Trigger LaTeX preview if this is an equation field
               if (labelName === 'latex' || labelName === 'text_form') {
                 renderLatexPreview(e.target.value, previewContainer);
               }
             });
           }
-          
+
           controlWrapper.appendChild(input);
-          
+
           // Add LaTeX live preview box right under LaTeX input box
           let previewContainer;
           if (labelName === 'latex' || labelName === 'text_form') {
             controlWrapper.style.flexDirection = 'column';
             controlWrapper.style.alignItems = 'stretch';
-            
+
             previewContainer = document.createElement('div');
             previewContainer.className = 'equation-display-card';
             previewContainer.style.marginTop = '0.5rem';
-            
+
             const cardLabel = document.createElement('span');
             cardLabel.className = 'equation-card-label';
             cardLabel.textContent = `Live Equation Preview (${labelName})`;
             previewContainer.appendChild(cardLabel);
-            
+
             const mathSpan = document.createElement('div');
             mathSpan.style.width = '100%';
             previewContainer.appendChild(mathSpan);
-            
+
             controlWrapper.appendChild(previewContainer);
-            
+
             // Run initial preview render
             setTimeout(() => {
               renderLatexPreview(strVal, mathSpan);
@@ -820,7 +770,7 @@ window.FormBuilder = (function() {
         }
       }
     }
-    
+
     group.appendChild(controlWrapper);
     return group;
   }
